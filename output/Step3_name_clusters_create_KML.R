@@ -287,8 +287,7 @@ landsat_build4 <- landsat_build3 %>%
       site_num == 72 ~ "Barren",
       site_num == 73 ~ "Forest",
       TRUE ~ NA)
-  ) %>%
-  filter(year == 2023)
+  ) 
 
 ################################################################################
 #Export named clusters
@@ -302,7 +301,7 @@ st_write(landsat_build4, file.path(output, "landsat/processed/named_clusters.geo
 
 # transform landsat data to Teale Albers
 
-landsat_build5 <- landsat_build4 %>% st_as_sf(crs = 4326)
+landsat_build5 <- landsat_build4 %>% st_as_sf(crs = 4326) %>% filter(year == 2023)
 
 
 #Build barren layer
