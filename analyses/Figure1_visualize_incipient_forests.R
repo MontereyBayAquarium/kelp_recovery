@@ -464,62 +464,69 @@ print(p2_agg)
 ################################################################################
 #plot final cluster map with new labels
 
-### STEP 1: Compute Cluster Centroids and Jitter their Positions
 
-# Assume joined_polygons is your resolved clusters sf object with attributes "new_cluster" and "incipient"
-# Transform to a metric CRS (e.g., UTM Zone 10N: EPSG:32610) for accurate distance calculations
+
+# Create a mapping vector as character (keys as the original new_cluster values, as characters)
+mapping <- c("23" = "1",  "11" = "2",  "24" = "3",  "12" = "4",
+             "37" = "5",  "13" = "6",  "38" = "7",  "9"  = "8",
+             "30" = "9",  "20" = "10", "29" = "11", "7"  = "12",
+             "27" = "13", "26" = "14", "25" = "15", "6"  = "16",
+             "4"  = "17", "18" = "18", "8"  = "19", "28" = "20",
+             "19" = "21", "5"  = "22", "17" = "23", "3"  = "24",
+             "36" = "25", "16" = "26", "10" = "27", "35" = "28",
+             "22" = "29", "21" = "30", "34" = "31", "33" = "32",
+             "31" = "33", "1"  = "34", "32" = "35", "15" = "36",
+             "2"  = "37", "14" = "38")
+
+# Recode the new_cluster field in joined_polygons:
+joined_polygons <- joined_polygons %>%
+  mutate(new_cluster_relabel = recode(as.character(new_cluster), !!!mapping))
+
+
+# Assuming you already computed centroids in a metric CRS for jittering:
+# (This code is from our previous snippet)
 joined_polygons_metric <- st_transform(joined_polygons, 32610)
-
-# Compute centroids for each resolved cluster
 centroids <- st_centroid(joined_polygons_metric)
-
-# Get the coordinates as a numeric matrix
 coords <- st_coordinates(centroids)
 
-# Set a seed for reproducibility and define jitter amount (in meters)
 set.seed(123)
-jitter_amount <- 20  # Adjust as needed
-
-# Apply random jitter to the coordinates
+jitter_amount <- 20  # jitter amount in meters
 jittered_coords <- coords + cbind(rnorm(nrow(coords), mean = 0, sd = jitter_amount),
                                   rnorm(nrow(coords), mean = 0, sd = jitter_amount))
 
-# Create a new sf object from the jittered coordinates while preserving the original attributes
 jittered_labels <- st_as_sf(as.data.frame(jittered_coords), coords = c("X", "Y"), crs = 32610)
-# Copy the new_cluster and incipient attributes from the centroids
+# Copy the new_cluster attribute from centroids (it should match row order)
 jittered_labels$new_cluster <- centroids$new_cluster
-jittered_labels$incipient   <- centroids$incipient
 
-# Transform the jittered label positions back to the original CRS (assumed to be the same as joined_polygons)
+# Now, recode to the new labels using the same mapping:
+jittered_labels <- jittered_labels %>%
+  mutate(new_cluster_relabel = recode(as.character(new_cluster), !!!mapping))
+
+# Transform back to your map's CRS (likely WGS84)
 jittered_labels <- st_transform(jittered_labels, st_crs(joined_polygons))
 
+library(ggplot2)
 
-### STEP 2: Create/Update Your Map with the New Labels
-
-# Suppose p_map is your original map created using joined_polygons. We'll add the jittered labels.
 p_map <- ggplot() +
-  # Plot your resolved clusters (polygons) colored by incipient type
+  # Plot your resolved clusters (polygons) with fill based on incipient
   geom_sf(data = joined_polygons, aes(fill = incipient), color = "black", size = 0.5, alpha = 0.7) +
   scale_fill_manual(values = c("Forest" = "forestgreen",
                                "Barren" = "purple",
                                "Incipient" = "orange"),
                     name = "Site type") +
-  # Add county boundaries for context
+  # Add county boundaries for context (assuming ca_counties is defined)
   geom_sf(data = ca_counties, fill = "gray", color = "gray80") +
-  # Add your inset map (assuming g1_inset is defined)
+  # Add your inset map (g1_inset assumed to be defined)
   annotation_custom(grob = g1_inset, xmin = -122.01, xmax = -121.96, ymin = 36.625) +
-  # Use ggrepel to add labels for each new cluster at the jittered locations
+  # Add jittered labels for each new cluster with the recoded label:
   ggrepel::geom_label_repel(data = jittered_labels,
-                            aes(label = new_cluster, geometry = geometry),
-                            stat = "sf_coordinates",  # This tells ggplot2 to extract x and y from the geometry column
+                            aes(label = new_cluster_relabel, geometry = geometry),
+                            stat = "sf_coordinates",
                             size = 3, color = "black") +
-  # Define the map extent (adjust as needed)
+  # Define the map extent. Adjust xlim and ylim as needed.
   coord_sf(xlim = c(-121.99, -121.88), ylim = c(36.519, 36.645), crs = st_crs(joined_polygons)) +
   theme_bw() +
-  base_theme   # Ensure your base_theme is defined
+  base_theme  # Ensure base_theme is defined
 
-# Display the final map
 print(p_map)
-
-
 
