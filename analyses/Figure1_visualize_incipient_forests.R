@@ -96,31 +96,21 @@ cluster_coord <- clusters %>%
 
 
 # Build inset
-g1_inset <-  ggplotGrob(
+g1_inset <- ggplotGrob(
   ggplot() +
     # Plot land
-    geom_sf(data=foreign, fill="grey80", color="white", lwd=0.3) +
-    geom_sf(data=usa, fill="grey80", color="white", lwd=0.3) +
-    # Plot box
-    annotate("rect", xmin=-122.6, xmax=-121, ymin=36.2, ymax=37.1, color="black", fill=NA, lwd=0.6) +
-    # Label regions
-    #geom_text(data=region_labels, mapping=aes(y=lat_dd, label=region), x= -124.4, hjust=0, size=2) +
-    # Labels
-    labs(x="", y="") +
-    # Crop
+    geom_sf(data = foreign, fill = "grey80", color = "white", lwd = 0.3) +
+    geom_sf(data = usa, fill = "grey80", color = "white", lwd = 0.3) +
+    # Plot box (if needed; you can remove this if your panel border is enough)
+    annotate("rect", xmin = -122.6, xmax = -121, ymin = 36.2, ymax = 37.1, 
+             color = "black", fill = NA, lwd = 0.6) +
+    labs(x = "", y = "") +
+    # Crop to desired extent
     coord_sf(xlim = c(-124.5, -117), ylim = c(32.5, 42)) +
-    # Theme
-    theme_bw() + base_theme +
-    theme( plot.margin = unit(rep(0, 4), "null"),
-           panel.margin = unit(rep(0, 4), "null"),
-           panel.background = element_rect(fill='transparent'), #transparent panel bg
-           # plot.background = element_rect(fill='transparent', color=NA), #transparent plot bg
-           axis.ticks = element_blank(),
-           axis.ticks.length = unit(0, "null"),
-           axis.ticks.margin = unit(0, "null"),
-           axis.text = element_blank(),
-           axis.title=element_blank(),
-           axis.text.y = element_blank())
+    # Start with an empty theme
+    theme_void() +
+    # Add back just the panel border so that the inset has an outline.
+    theme(panel.border = element_rect(color = "black", fill = NA, size = 0.6))
 )
 #g1_inset
 
@@ -509,7 +499,7 @@ library(ggplot2)
 
 p_map <- ggplot() +
   # Plot your resolved clusters (polygons) with fill based on incipient
-  geom_sf(data = joined_polygons, aes(fill = incipient), color = "black", size = 0.5, alpha = 0.7) +
+  geom_sf(data = joined_polygons, aes(fill = incipient), color = "black", size = 0.5) +
   scale_fill_manual(values = c("Forest" = "forestgreen",
                                "Barren" = "purple",
                                "Incipient" = "orange"),
