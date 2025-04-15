@@ -6,7 +6,7 @@ rm(list=ls())
 
 ######
 #required packages
-librarian::shelf(tidyverse, sf, raster, shiny, tmap)
+librarian::shelf(tidyverse, sf, raster, shiny, tmap, scales)
 
 #set directories 
 basedir <- "/Volumes/seaotterdb$/kelp_recovery/data"
@@ -129,16 +129,16 @@ p1 <- ggplot() +
                     xmax = -121.96,
                     ymin = 36.625) +
   # Add jittered labels for site_name with boxes
-  ggrepel::geom_label_repel(
-    data = cluster_coord,
-    aes(x = long, y = lat, label = site_num),
-    box.padding = 0.3,
-    point.padding = 0.5,
-    force = 18,
-    size = 2,
-    min.segment.length = 0.1,
-    segment.color = "black"
-  ) +
+  #ggrepel::geom_label_repel(
+  #  data = cluster_coord,
+  #  aes(x = long, y = lat, label = site_num),
+  #  box.padding = 0.3,
+  #  point.padding = 0.5,
+  #  force = 18,
+  #  size = 2,
+  #  min.segment.length = 0.1,
+  #  segment.color = "black"
+  #) +
   #add scale bar
   ggsn::scalebar(x.min = -121.99, x.max = -121.88, 
                  y.min = 36.519, y.max = 36.645,
@@ -188,13 +188,12 @@ cluster_polygons <- clusters %>%
 # Compute the convex hull for each group
 
 
+
 p2 <- ggplot() +
   # Plot cluster polygons with the fill based on the incipient category
   geom_sf(data = cluster_polygons, 
           aes(fill = incipient),      # fill mapped to incipient
-          color = "black",            # black border for each cluster
-          size = 0.5,                 # adjust line width as needed
-          alpha = 0.7) +              # optional transparency
+          color = "black")+            # black border for each cluster            # optional transparency
   scale_fill_manual(values = c("Forest" = "forestgreen", 
                                "Barren" = "purple", 
                                "Incipient" = "orange"), 
@@ -233,21 +232,15 @@ p2 <- ggplot() +
   # Apply theme adjustments
   theme_bw() +
   base_theme +
+  theme(axis.title = element_blank())+
   coord_sf(xlim = c(-121.99, -121.88), ylim = c(36.519, 36.645), crs = 4326)
 
 p2
 
 
 
-
-
-
 ################################################################################
-#plot everything
-
-
-#ggsave(p1,  filename=file.path(figdir, "Cluster_site_type_map.png"), width = 7.5, height = 9.5, units = "in",
-#      bg = "white", dpi = 600)
+#plot trends by each patch 
 
 
 # Theme
@@ -268,9 +261,6 @@ base_theme <-  theme(axis.text.x=element_text(size=10, color = "black"),
                      #facets
                      strip.text = element_text(size=12, face = "bold",color = "black", hjust=0),
                      strip.background = element_blank())
-
-
-# Plot 
 
 
 # Define the sequence of years to label every 3 years
@@ -362,9 +352,11 @@ p4 <- ggplot() +
   ) +
   theme_bw() +
   base_theme +
+  theme(axis.title = element_blank())+
   coord_sf(xlim = c(-121.99, -121.88), ylim = c(36.519, 36.645), crs = 4326)
 
 p4
+
 
 
 ################################################################################
@@ -432,28 +424,35 @@ agg_ts <- clusters_joined %>%
 print(head(agg_ts))
 
 # ===== STEP 5: Plot the Aggregated Time Series =====
-p2_agg <- ggplot(agg_ts %>% filter(year > 2013),
-                 aes(x = year, y = mean_perc, color = incipient)) +
+p5 <- ggplot(agg_ts %>% filter(year > 2013),
+             aes(x = year, y = mean_perc, color = incipient, fill = incipient)) +
+  # Add a red rectangle for the 2014-2016 period:
+  annotate(geom = "rect", xmin = 2014, xmax = 2016, ymin = -Inf, ymax = Inf, 
+           fill = "indianred", alpha = 0.7) +
   geom_point() +
   geom_smooth(se = TRUE) +
   scale_color_manual(values = c("Forest" = "forestgreen",
                                 "Barren" = "purple",
                                 "Incipient" = "orange"),
                      name = "Site type") +
-  labs(y = "Percent of max (relative to 2009-2013)",
-       title = "Aggregated Time Series for Resolved Clusters") +
+  scale_fill_manual(values = c("Forest" = "forestgreen",
+                               "Barren" = "purple",
+                               "Incipient" = "orange"),
+                    name = "Site type") +
+  labs(y = "Percent of max (relative to 2009-2013)", title = "",
+       x = "Year") +
   facet_wrap(~ new_cluster, scales = "free_y") +
   theme_bw() +
-  base_theme +               # Ensure base_theme is defined in your workspace
-  scale_x_continuous(breaks = years_to_label)  # Ensure years_to_label is defined
+  base_theme +               # Ensure base_theme is defined
+  scale_x_continuous(breaks = years_to_label) 
 
-# Display the plot
-print(p2_agg)
+p5
+
+
 
 
 ################################################################################
 #plot final cluster map with new labels
-
 
 
 # Create a mapping vector as character (keys as the original new_cluster values, as characters)
@@ -495,9 +494,9 @@ jittered_labels <- jittered_labels %>%
 # Transform back to your map's CRS (likely WGS84)
 jittered_labels <- st_transform(jittered_labels, st_crs(joined_polygons))
 
-library(ggplot2)
 
-p_map <- ggplot() +
+
+p6 <- ggplot() +
   # Plot your resolved clusters (polygons) with fill based on incipient
   geom_sf(data = joined_polygons, aes(fill = incipient), color = "black", size = 0.5) +
   scale_fill_manual(values = c("Forest" = "forestgreen",
@@ -513,10 +512,37 @@ p_map <- ggplot() +
                             aes(label = new_cluster_relabel, geometry = geometry),
                             stat = "sf_coordinates",
                             size = 3, color = "black") +
+  #add north arrow
+  ggsn::north(x.min = -121.99, x.max = -121.88, 
+              y.min = 36.519, y.max = 36.65,
+              location = "topright", 
+              scale = 0.05, 
+              symbol = 10)+
   # Define the map extent. Adjust xlim and ylim as needed.
   coord_sf(xlim = c(-121.99, -121.88), ylim = c(36.519, 36.645), crs = st_crs(joined_polygons)) +
   theme_bw() +
+  labs(x = "",y="")+
   base_theme  # Ensure base_theme is defined
 
-print(p_map)
+p6
+
+################################################################################
+#check out plots and export
+
+p1
+p2
+p3
+p4
+p5
+
+
+
+
+
+
+
+
+
+
+
 
