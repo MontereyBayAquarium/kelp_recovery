@@ -7,8 +7,9 @@ rm(list=ls())
 ################################################################################
 
 # This code calculates the annual canopy area for Q3 of each of 123 identified 
-# clusters using a rolling average (year t, year t-1, year t+1). The processing
-# steps are:
+# clusters using a rolling average (year t, year t-1, year t+1). We retain the 
+# point geometry and map the cluster average back to each point. 
+# The processing steps are:
 
 #1: filter the data to quarter 3 for each year
 #2: Calculate the total canopy area (sum) for each cluster and each year

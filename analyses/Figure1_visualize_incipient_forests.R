@@ -47,6 +47,12 @@ base_theme <-  theme(axis.text=element_text(size=7, color = "black"),
                      strip.text = element_text(size=6, face = "bold",color = "black", hjust=0),
                      strip.background = element_blank())
 
+ggplot(clusters %>% filter(year > 2013), aes(x = year, y = perc_of_max_3,
+                                             color = incipient)) +
+  geom_point() + 
+  geom_smooth(se = TRUE) +
+  facet_wrap(~ site_num, scales = "free_y") + theme_bw() + base_theme
+
 
 ################################################################################
 #determine center coords (THIS WILL BE IMPORTANT TO SAVE LATER)
@@ -82,7 +88,6 @@ ggplot() +
 
 ################################################################################
 #plot individual points and clusters
-
 
 
 cluster_coord <- clusters %>%
@@ -527,6 +532,56 @@ p6 <- ggplot() +
 p6
 
 ################################################################################
+#Visualize occupiable habitat
+
+p6 <- ggplot() +
+  # Add clusters
+  geom_sf(data = clusters %>% filter(year == 2023), fill = "forestgreen", color = "forestgreen") +
+  geom_sf(data = ca_counties, fill = "gray", color = "gray80") +
+  labs(title = "", tag = "") +
+  # Add landmarks
+  #geom_text(data = monterey_label, mapping = aes(x = x, y = y, label = label),
+  #        size = 3, fontface = "bold") +
+  # Add CA inset
+  annotation_custom(grob = g1_inset, 
+                    xmin = -122.01, 
+                    xmax = -121.96,
+                    ymin = 36.625) +
+#add scale bar
+ggsn::scalebar(x.min = -121.99, x.max = -121.88, 
+               y.min = 36.519, y.max = 36.645,
+               #anchor=c(x=-124.7,y=41),
+               location="bottomright",
+               dist = 2, dist_unit = "km",
+               transform=TRUE, 
+               model = "WGS84",
+               st.dist=0.02,
+               st.size=2,
+               border.size=.5,
+               height=.02
+)+
+  #add north arrow
+  ggsn::north(x.min = -121.99, x.max = -121.88, 
+              y.min = 36.519, y.max = 36.65,
+              location = "topright", 
+              scale = 0.05, 
+              symbol = 10)+
+  theme_bw() +  theme(
+    plot.tag.position = c(-0.03, 1),
+    axis.title = element_blank()) +
+  labs(title = "",
+       x="",
+       y="")+
+  theme(axis.text.x = element_blank(),
+        axis.text.y = element_blank())+
+  #guides(fill = guide_legend(override.aes = list(size = 3))) +
+  base_theme+
+  coord_sf(xlim = c(-121.99, -121.88), ylim = c(36.519, 36.645), crs = 4326) 
+
+p6
+
+
+################################################################################
 #check out plots and export
 
 p1
@@ -534,6 +589,10 @@ p2
 p3
 p4
 p5
+p6
+
+
+
 
 
 
