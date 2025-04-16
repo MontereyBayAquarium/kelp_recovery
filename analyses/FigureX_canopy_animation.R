@@ -7,7 +7,7 @@ rm(list=ls())
 
 require(librarian)
 
-librarian::shelf(ridyverse, sf, ggplot2, gganimate, gifski)
+librarian::shelf(tidyverse, sf, ggplot2, gganimate, gifski)
 
 #set directories
 basedir <- "/Volumes/seaotterdb$/kelp_recovery/data"
@@ -20,6 +20,8 @@ landsat_orig <- st_read(file.path(localdir, "processed/monterey_peninsula/landsa
 
 # Read in the California counties data
 ca_counties <- st_read(file.path(basedir, "gis_data/raw/ca_county_boundaries/s7vc7n.shp"))
+usa <- rnaturalearth::ne_states(country="United States of America", returnclass = "sf")
+foreign <- rnaturalearth::ne_countries(country=c("Canada", "Mexico"), returnclass = "sf")
 
 ################################################################################
 #prep data
@@ -92,7 +94,9 @@ p <- ggplot() +
   annotate("text",
            x = -121.87,    
            y = 36.50,     
-           label = paste("Data accessed from:",
+           label = paste("Code for reproducibility:",
+                         "https://github.com/MontereyBayAquarium/kelp_recovery/",
+                         "Data accessed from:",
                          "Santa Barbara Coastal LTER,",
                          "K.C. Cavanaugh, D.A. Siegel, D.C. Reed, and T.W. Bell. 2020.",
                          "SBC LTER: Time series of kelp biomass in the canopy from Landsat 5,",
@@ -107,7 +111,7 @@ p <- ggplot() +
   theme_bw() +
   base_theme +  
   theme(
-    plot.title = element_text(hjust = 0.5, size = 14),  
+    plot.title = element_text(hjust = 0.5, size = 18),  
     axis.text.x = element_blank(),   
     axis.text.y = element_blank(),   
     axis.ticks.x = element_blank(),  
