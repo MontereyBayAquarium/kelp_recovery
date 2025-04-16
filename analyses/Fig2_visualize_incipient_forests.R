@@ -356,7 +356,7 @@ p4 <- ggplot() +
                  location = "bottomright",
                  dist = 2, dist_unit = "km",
                  transform = TRUE, model = "WGS84",
-                 st.dist = 0.02, st.size = 2,
+                 st.dist = 0.02, st.size = 4,
                  border.size = 0.5, height = 0.02
   ) +
   ggsn::north(x.min = -121.99, x.max = -121.88,  
@@ -366,7 +366,16 @@ p4 <- ggplot() +
   theme_bw() +
   base_theme +
   theme(axis.title = element_blank())+
-  coord_sf(xlim = c(-121.99, -121.88), ylim = c(36.519, 36.645), crs = 4326)
+  coord_sf(xlim = c(-121.99, -121.88), ylim = c(36.519, 36.645), crs = 4326)+
+  theme(
+    axis.text.x = element_blank(),   
+    axis.text.y = element_blank(),   
+    axis.ticks.x = element_blank(),  
+    axis.ticks.y = element_blank(),  
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.title = element_blank()
+  )
 
 p4
 
@@ -600,16 +609,19 @@ p5
 p6
 
 
-#save
-ggsave(p2, filename = file.path(figdir, "Fig1_clusters_unresolved.png"), 
+#save unresolved clusters
+ggsave(p2, filename = file.path(figdir, "Fig2_clusters_unresolved.png"), 
       width = 6, height = 8, units = "in", dpi = 600, bg = "white") #last write 26 Sept 2024
 
 
+#save clusters resolved with convex hulls
+ggsave(p4, filename = file.path(figdir, "Fig3_clusters_convex_hull.png"), 
+       width = 6, height = 8, units = "in", dpi = 600, bg = "white") #last write 26 Sept 2024
 
 
-
-
-
+#save clusters resolved with convex hulls
+ggsave(p5, filename = file.path(figdir, "Fig4_cluster_timerseries.png"), 
+       width = 13, height = 7.5, units = "in", dpi = 600, bg = "white") #last write 26 Sept 2024
 
 
 
