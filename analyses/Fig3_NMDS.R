@@ -162,9 +162,7 @@ phys_sig$nice_variable <- nice_name(phys_sig$variable)
 bio_sig$nice_variable  <- nice_name(bio_sig$variable)
 
 
-# ====================================================
-# DENSITY DATA ANALYSIS WITH VECTORS (Using Euclidean distance)
-# ====================================================
+#Run NMDS on density data-------------------------------------------------------
 
 density_vars <- c(
   "red_urchin_densitym2",
@@ -188,6 +186,7 @@ density_vars <- c(
   "purple_urchin_densitym2",
   "purple_urchin_conceiledm2"
 )
+
 density_data <- merge_dat[, density_vars]
 complete_idx_density <- complete.cases(density_data)
 density_data_complete <- density_data[complete_idx_density, ]
@@ -203,21 +202,6 @@ cat("NMDS stress (Density):", nmds_density$stress, "\n")
 scores_density <- as.data.frame(scores(nmds_density, display = "sites"))
 scores_density$site_type <- meta_density$site_type
 
-## For Density, show only centroids
-centroids_density <- scores_density %>%
-  group_by(site_type) %>%
-  summarize(NMDS1 = mean(NMDS1), NMDS2 = mean(NMDS2))
-p_density <- ggplot(scores_density, aes(x = NMDS1, y = NMDS2)) +
-  stat_ellipse(aes(color = site_type), type = "norm", linetype = 1, size = 1) +
-  # Uncomment the next line to show individual points:
-  # geom_point(aes(color = site_type, shape = site_type), size = 3, alpha = 0.5) +
-  geom_point(data = centroids_density, aes(x = NMDS1, y = NMDS2, color = site_type, shape = site_type),
-             size = 4, alpha = 1) +
-  scale_color_brewer(palette = "Dark2") +
-  labs(title = "",
-       x = "NMDS1", y = "NMDS2", color = "Site Type", shape = "Site Type") +
-  theme_bw() + my_theme
-print(p_density)
 
 ## Global and Pairwise PERMANOVA on Density Data
 dist_density <- dist(density_data_complete, method = "euclidean")
@@ -252,36 +236,6 @@ print(bio_sig_density)
 # Use nice_name() to clean up names; this will now remove "density20m2_" if present
 phys_sig_density$nice_variable <- nice_name(phys_sig_density$variable)
 bio_sig_density$nice_variable  <- nice_name(bio_sig_density$variable)
-
-# Multiply density vectors by density_multiplier
-phys_sig_density$NMDS1 <- phys_sig_density$NMDS1 * density_multiplier
-phys_sig_density$NMDS2 <- phys_sig_density$NMDS2 * density_multiplier
-bio_sig_density$NMDS1 <- bio_sig_density$NMDS1 * density_multiplier
-bio_sig_density$NMDS2 <- bio_sig_density$NMDS2 * density_multiplier
-
-p_density_final <- p_density +
-  geom_segment(data = phys_sig_density, inherit.aes = FALSE,
-               aes(x = 0, y = 0, xend = NMDS1, yend = NMDS2),
-               arrow = arrow(length = unit(0.2, "cm")), color = "indianred", size = 1) +
-  geom_text(data = phys_sig_density, inherit.aes = FALSE,
-            aes(x = NMDS1, y = NMDS2, label = nice_variable),
-            color = "indianred", vjust = 1.5, size = 3) +
-  geom_segment(data = bio_sig_density, inherit.aes = FALSE,
-               aes(x = 0, y = 0, xend = NMDS1, yend = NMDS2),
-               arrow = arrow(length = unit(0.2, "cm")), color = "gray70", size = 1,
-               alpha = 0.5) +
-  geom_text(data = bio_sig_density, inherit.aes = FALSE,
-            aes(x = NMDS1, y = NMDS2, label = nice_variable),
-            color = "black", vjust = -0.5, 
-            nudge_x = 0.001, nudge_y = 0.001, size = 3)+
-  #coord_cartesian(clip = "off") +
-  theme(plot.margin = unit(c(1, 1, 1, 1), "cm"))
-print(p_density_final)
-
-#ggsave(p_density_final, filename=file.path("/Users/jossmith/Downloads", "Fig1_NMDS_sitetype.png"), width=8, height=6, units="in", dpi=600)
-
-
-
 
 
 
@@ -361,7 +315,7 @@ p3 <- p2 +
             color = "blue", vjust = 1.5, size = 3) +
   geom_segment(data = bio_sig, inherit.aes = FALSE,
                aes(x = 0, y = 0, xend = NMDS1, yend = NMDS2),
-               arrow = arrow(length = unit(0.2, "cm")), color = "black", size = 1) +
+               arrow = arrow(length = unit(0.2, "cm")), color = "gray70", size = 1) +
   geom_text(data = bio_sig, inherit.aes = FALSE,
             aes(x = NMDS1, y = NMDS2, label = nice_variable),
             color = "black", vjust = -0.5, size = 3)
@@ -369,4 +323,234 @@ p3
 
 
 
-#
+#Plot density-------------------------------------------------------------------
+
+
+## For Density, show only centroids
+centroids_density <- scores_density %>%
+  group_by(site_type) %>%
+  summarize(NMDS1 = mean(NMDS1), NMDS2 = mean(NMDS2))
+
+p4 <- ggplot(scores_density, aes(x = NMDS1, y = NMDS2)) +
+  stat_ellipse(aes(color = site_type), type = "norm", linetype = 1, size = 1) +
+  # Uncomment the next line to show individual points:
+  # geom_point(aes(color = site_type, shape = site_type), size = 3, alpha = 0.5) +
+  geom_point(data = centroids_density, aes(x = NMDS1, y = NMDS2, color = site_type, shape = site_type),
+             size = 4, alpha = 1) +
+  scale_color_manual(values = c(
+    "FOR" = "#1B9E77",
+    "INCIP"  = "#D95F02",
+    "BAR" = "#7570B3"
+  )) +
+  labs(title = "",
+       x = "NMDS1", y = "NMDS2", color = "Site Type", shape = "Site Type") +
+  theme_bw() + my_theme
+p4
+
+
+
+
+# Multiply density vectors by density_multiplier
+phys_sig_density$NMDS1 <- phys_sig_density$NMDS1 * density_multiplier
+phys_sig_density$NMDS2 <- phys_sig_density$NMDS2 * density_multiplier
+bio_sig_density$NMDS1 <- bio_sig_density$NMDS1 * density_multiplier
+bio_sig_density$NMDS2 <- bio_sig_density$NMDS2 * density_multiplier
+
+p5 <- p4 +
+  geom_segment(data = phys_sig_density, inherit.aes = FALSE,
+               aes(x = 0, y = 0, xend = NMDS1, yend = NMDS2),
+               arrow = arrow(length = unit(0.2, "cm")), color = "indianred", size = 1) +
+  geom_text(data = phys_sig_density, inherit.aes = FALSE,
+            aes(x = NMDS1, y = NMDS2, label = nice_variable),
+            color = "indianred", vjust = 1.5, size = 3) +
+  geom_segment(data = bio_sig_density, inherit.aes = FALSE,
+               aes(x = 0, y = 0, xend = NMDS1, yend = NMDS2),
+               arrow = arrow(length = unit(0.2, "cm")), color = "gray70", size = 1,
+               alpha = 0.5) +
+  geom_text(data = bio_sig_density, inherit.aes = FALSE,
+            aes(x = NMDS1, y = NMDS2, label = nice_variable),
+            color = "black", vjust = -0.5, 
+            nudge_x = 0.001, nudge_y = 0.001, size = 3)+
+  #coord_cartesian(clip = "off") +
+  theme(plot.margin = unit(c(1, 1, 1, 1), "cm"))
+p5
+
+################################################################################
+#Toy with 3D nMDS
+
+# Full 3D NMDS with convex‐hull bubbles and all (or more) vectors
+
+# Assumes you’ve defined:
+#   density_data_complete, meta_density,
+#   physical_vars_density, density_multiplier,
+#   and your nice_name() function
+
+library(vegan)
+library(plotly)
+library(geometry)
+library(dplyr)
+
+# 1) 3‑dimensional NMDS
+set.seed(123)
+nmds3 <- metaMDS(
+  density_data_complete,
+  distance = "euclidean",
+  k        = 3,
+  trymax   = 100
+)
+
+# 2) Extract site scores and add site_type
+scr3 <- as.data.frame(scores(nmds3, display = "sites"))
+scr3$site_type <- meta_density$site_type
+
+# 3) Compute convex‐hull centroids (optional)
+centroids3 <- scr3 %>%
+  group_by(site_type) %>%
+  summarise(
+    NMDS1 = mean(NMDS1),
+    NMDS2 = mean(NMDS2),
+    NMDS3 = mean(NMDS3)
+  )
+
+# 4) Build matrices for manual 3D env‑fit
+scores_mat <- as.matrix(scr3[, c("NMDS1","NMDS2","NMDS3")])
+phys_mat   <- as.matrix(physical_vars_density)
+bio_mat    <- as.matrix(density_data_complete)
+
+# 5) Compute Pearson correlations of each predictor with each axis
+cor_phys <- cor(phys_mat, scores_mat, use = "pairwise.complete.obs")
+cor_bio  <- cor(bio_mat,  scores_mat, use = "pairwise.complete.obs")
+
+# 6) Scale them by your multiplier
+ar_phys3 <- cor_phys * density_multiplier
+ar_bio3  <- cor_bio  * density_multiplier
+
+# 7) Inspect vector lengths (overall 3D correlation)
+len_phys <- sqrt(rowSums(ar_phys3^2))
+len_bio  <- sqrt(rowSums(ar_bio3^2))
+print(len_phys)
+print(len_bio)
+
+# 8) Decide which vectors to show
+# Option A: keep only those above a lowered threshold (e.g. 0.1)
+sig_phys <- ar_phys3[len_phys > 0.1, , drop = FALSE]
+sig_bio  <- ar_bio3 [len_bio  > 0.1, , drop = FALSE]
+
+# Option B: to show all vectors, uncomment these lines:
+# sig_phys <- ar_phys3
+# sig_bio  <- ar_bio3
+
+# 9) Colors for site types
+type_colors <- c("FOR" = "#1B9E77", "INCIP" = "#D95F02", "BAR" = "#7570B3")
+
+# 10) Start empty Plotly canvas
+p3d <- plot_ly()
+
+# 11) Add convex‐hull mesh “bubbles” per site_type
+for (st in unique(scr3$site_type)) {
+  pts  <- filter(scr3, site_type == st)[, c("NMDS1","NMDS2","NMDS3")]
+  hull <- convhulln(as.matrix(pts), options = "Qt")
+  p3d <- p3d %>% add_trace(
+    type       = "mesh3d",
+    x          = pts$NMDS1,
+    y          = pts$NMDS2,
+    z          = pts$NMDS3,
+    i          = hull[,1] - 1,
+    j          = hull[,2] - 1,
+    k          = hull[,3] - 1,
+    opacity    = 0.2,
+    color      = type_colors[st],
+    name       = st,
+    showlegend = TRUE
+  )
+}
+
+# 12) (Optional) add centroids as markers
+p3d <- p3d %>% add_trace(
+  data       = centroids3,
+  x          = ~NMDS1, y = ~NMDS2, z = ~NMDS3,
+  type       = "scatter3d",
+  mode       = "markers",
+  marker     = list(size = 8, symbol = "diamond", opacity = 1),
+  inherit    = FALSE,
+  showlegend = FALSE
+)
+
+# 13) Add physical vectors as red lines
+for (i in seq_len(nrow(sig_phys))) {
+  df_vec <- data.frame(
+    x = c(0, sig_phys[i,1]),
+    y = c(0, sig_phys[i,2]),
+    z = c(0, sig_phys[i,3])
+  )
+  p3d <- p3d %>% add_trace(
+    data       = df_vec,
+    x          = ~x, y = ~y, z = ~z,
+    type       = "scatter3d",
+    mode       = "lines",
+    line       = list(color = "indianred", width = 4),
+    inherit    = FALSE,
+    showlegend = FALSE
+  )
+}
+
+# 14) Add labels for physical vectors
+df_phys_lbl <- data.frame(
+  x   = sig_phys[,1],
+  y   = sig_phys[,2],
+  z   = sig_phys[,3],
+  txt = nice_name(rownames(sig_phys))
+)
+p3d <- p3d %>% add_trace(
+  data         = df_phys_lbl,
+  x            = ~x, y = ~y, z = ~z, text = ~txt,
+  type         = "scatter3d",
+  mode         = "text",
+  textposition = "top right",
+  inherit      = FALSE,
+  showlegend   = FALSE
+)
+
+# 15) Add biological vectors as gray lines
+for (i in seq_len(nrow(sig_bio))) {
+  df_vec <- data.frame(
+    x = c(0, sig_bio[i,1]),
+    y = c(0, sig_bio[i,2]),
+    z = c(0, sig_bio[i,3])
+  )
+  p3d <- p3d %>% add_trace(
+    data       = df_vec,
+    x          = ~x, y = ~y, z = ~z,
+    type       = "scatter3d",
+    mode       = "lines",
+    line       = list(color = "gray70", width = 2),
+    inherit    = FALSE,
+    showlegend = FALSE
+  )
+}
+
+# 16) Add labels for biological vectors
+df_bio_lbl <- data.frame(
+  x   = sig_bio[,1],
+  y   = sig_bio[,2],
+  z   = sig_bio[,3],
+  txt = nice_name(rownames(sig_bio))
+)
+p3d <- p3d %>% add_trace(
+  data         = df_bio_lbl,
+  x            = ~x, y = ~y, z = ~z, text = ~txt,
+  type         = "scatter3d",
+  mode         = "text",
+  textposition = "bottom left",
+  inherit      = FALSE,
+  showlegend   = FALSE
+)
+
+# 17) Final layout
+p3d %>% layout(
+  scene = list(
+    xaxis = list(title = "NMDS1"),
+    yaxis = list(title = "NMDS2"),
+    zaxis = list(title = "NMDS3")
+  )
+)
