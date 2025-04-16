@@ -12,6 +12,7 @@ librarian::shelf(tidyverse, sf, ggplot2, gganimate, gifski)
 #set directories
 basedir <- "/Volumes/seaotterdb$/kelp_recovery/data"
 localdir <- "/Users/jossmith/Documents/Data/landsat"
+figdir <- here::here("figures")
 
 # Read in the Landsat data (using your provided shapefile)
 landsat_orig <- st_read(file.path(localdir, "processed/monterey_peninsula/landsat_mpen_1984_2023_points_withNAs.shp"))
@@ -122,12 +123,12 @@ p <- ggplot() +
   )
 
 p
-
+class(p)
 
 ################################################################################
 #render animation
 
-anim <- animate(p,
+anim <- gganimate::animate(p,
                 nframes = length(unique(landsat_filtered$year)),
                 fps = 3,
                 width = 600,
@@ -137,9 +138,11 @@ anim <- animate(p,
 anim 
 
 # Save 
-anim_save(file.path("/Users/jossmith/Downloads", "kelp_presence.gif"), animation = anim)
+anim_save(file.path(figdir, "Fig1_canopy_animation.gif"), animation = anim)
 
-
+#save unresolved clusters
+ggsave(p2, filename = file.path(figdir, "Fig2_clusters_unresolved.png"), 
+       width = 6, height = 8, units = "in", dpi = 600, bg = "white") #last write 26 Sept 2024
 
 
 

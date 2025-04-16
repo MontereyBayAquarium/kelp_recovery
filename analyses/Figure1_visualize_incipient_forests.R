@@ -226,7 +226,7 @@ p2 <- ggplot() +
     location = "bottomright",
     dist = 2, dist_unit = "km",
     transform = TRUE, model = "WGS84",
-    st.dist = 0.02, st.size = 2,
+    st.dist = 0.02, st.size = 4,
     border.size = 0.5, height = 0.02
   ) +
   ggsn::north(
@@ -237,8 +237,16 @@ p2 <- ggplot() +
   # Apply theme adjustments
   theme_bw() +
   base_theme +
-  theme(axis.title = element_blank())+
-  coord_sf(xlim = c(-121.99, -121.88), ylim = c(36.519, 36.645), crs = 4326)
+  coord_sf(xlim = c(-121.99, -121.88), ylim = c(36.519, 36.645), crs = 4326)+
+  theme(
+    axis.text.x = element_blank(),   
+    axis.text.y = element_blank(),   
+    axis.ticks.x = element_blank(),  
+    axis.ticks.y = element_blank(),  
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.title = element_blank()
+  )
 
 p2
 
@@ -393,7 +401,7 @@ if (!"incipient" %in% names(joined_polygons)) {
 # ===== STEP 1: Prepare Clusters for the Spatial Join =====
 # If clusters already has an "incipient" column that conflicts, remove it.
 if ("incipient" %in% names(clusters)) {
-  clusters_clean <- clusters %>% select(-incipient)
+  clusters_clean <- clusters %>% dplyr::select(-incipient)
 } else {
   clusters_clean <- clusters
 }
@@ -592,8 +600,9 @@ p5
 p6
 
 
-
-
+#save
+ggsave(p2, filename = file.path(figdir, "Fig1_clusters_unresolved.png"), 
+      width = 6, height = 8, units = "in", dpi = 600, bg = "white") #last write 26 Sept 2024
 
 
 
