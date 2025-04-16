@@ -80,7 +80,7 @@ ggplot(data = cluster_coord) +
 
 ggplot() +
   geom_sf(data = clusters, aes(color = incipient)) +
-  scale_color_manual(values = c("Forest" = "forestgreen", "Barren" = "purple", "Incipient" = "orange"), name = "Incipient") +
+  scale_color_manual(values = c("Forest" = "#1B9E77", "Barren" = "#7570B3", "Incipient" = "#D95F02"), name = "Incipient") +
   coord_sf(crs = 4326) +
   theme_minimal() 
 
@@ -122,7 +122,7 @@ g1_inset <- ggplotGrob(
 p1 <- ggplot() +
   # Add clusters
   geom_sf(data = clusters %>% filter(year == 2023), aes(color = incipient)) +
-  scale_color_manual(values = c("Forest" = "forestgreen", "Barren" = "purple", "Incipient" = "orange"), name = "Site type") +
+  scale_color_manual(values = c("Forest" = "#1B9E77", "Barren" = "#7570B3", "Incipient" = "#D95F02"), name = "Site type") +
   geom_sf(data = ca_counties, fill = "gray", color = "gray80") +
   labs(title = "", tag = "") +
   # Add landmarks
@@ -199,9 +199,9 @@ p2 <- ggplot() +
   geom_sf(data = cluster_polygons, 
           aes(fill = incipient),      # fill mapped to incipient
           color = "black")+            # black border for each cluster            # optional transparency
-  scale_fill_manual(values = c("Forest" = "forestgreen", 
-                               "Barren" = "purple", 
-                               "Incipient" = "orange"), 
+  scale_fill_manual(values = c("Forest" = "#1B9E77", 
+                               "Barren" = "#7570B3", 
+                               "Incipient" = "#D95F02"), 
                     name = "Site type") +
   # Plot other spatial layers (e.g., county boundaries)
   geom_sf(data = ca_counties, fill = "gray", color = "gray80") +
@@ -284,7 +284,7 @@ p3 <- ggplot(clusters %>% filter(year > 2013), aes(x = year, y = perc_of_max_3,
                                                          color = incipient)) +
   geom_point() + 
   geom_smooth(se = TRUE) +
-  scale_color_manual(values = c("Forest" = "forestgreen", "Barren" = "purple", "Incipient" = "orange"), name = "Site type") +
+  scale_color_manual(values = c("Forest" = "#1B9E77", "Barren" = "#7570B3", "Incipient" = "#D95F02"), name = "Site type") +
   labs(y = "Percent of max (relative to 2009-2013)",
        title = "")+
   facet_wrap(~ site_num, scales = "free_y") + 
@@ -338,9 +338,9 @@ p4 <- ggplot() +
   geom_sf(data = joined_polygons, aes(fill = incipient), color = "black", size = 0.5
           #, alpha = 0.7
           ) +
-  scale_fill_manual(values = c("Forest" = "forestgreen", 
-                               "Barren" = "purple", 
-                               "Incipient" = "orange"),
+  scale_fill_manual(values = c("Forest" = "#1B9E77", 
+                               "Barren" = "#7570B3", 
+                               "Incipient" = "#D95F02"),
                     name = "Site type") +
   # Add additional layers (e.g., county boundaries, inset map, labels)
   geom_sf(data = ca_counties, fill = "gray", color = "gray80") +
@@ -453,13 +453,13 @@ p5 <- ggplot(agg_ts %>% filter(year > 2013),
            fill = "indianred", alpha = 0.7) +
   geom_point() +
   geom_smooth(se = TRUE) +
-  scale_color_manual(values = c("Forest" = "forestgreen",
-                                "Barren" = "purple",
-                                "Incipient" = "orange"),
+  scale_color_manual(values = c("Forest" = "#1B9E77",
+                                "Barren" = "#7570B3",
+                                "Incipient" = "#D95F02"),
                      name = "Site type") +
-  scale_fill_manual(values = c("Forest" = "forestgreen",
-                               "Barren" = "purple",
-                               "Incipient" = "orange"),
+  scale_fill_manual(values = c("Forest" = "#1B9E77",
+                               "Barren" = "#7570B3",
+                               "Incipient" = "#D95F02"),
                     name = "Site type") +
   labs(y = "Percent of max (relative to 2009-2013)", title = "",
        x = "Year") +
@@ -521,9 +521,9 @@ jittered_labels <- st_transform(jittered_labels, st_crs(joined_polygons))
 p6 <- ggplot() +
   # Plot your resolved clusters (polygons) with fill based on incipient
   geom_sf(data = joined_polygons, aes(fill = incipient), color = "black", size = 0.5) +
-  scale_fill_manual(values = c("Forest" = "forestgreen",
-                               "Barren" = "purple",
-                               "Incipient" = "orange"),
+  scale_fill_manual(values = c("Forest" = "#1B9E77",
+                               "Barren" = "#7570B3",
+                               "Incipient" = "#D95F02"),
                     name = "Site type") +
   # Add county boundaries for context (assuming ca_counties is defined)
   geom_sf(data = ca_counties, fill = "gray", color = "gray80") +
