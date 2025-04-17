@@ -15,7 +15,8 @@ figdir <- here::here("figures")
 output <- here::here("output")
 
 #read landsat 
-clusters <- st_read(file.path(output, "/landsat/processed/named_clusters.geojson"))
+clusters <- st_read(file.path(output, "/landsat/processed/named_clusters.geojson")) #old clustering
+clusters <- st_read(file.path(output, "/landsat/processed/named_clustersv2.geojson"))
 
 #read state
 ca_counties <- st_read(file.path(basedir, "gis_data/raw/ca_county_boundaries/s7vc7n.shp")) 
@@ -47,8 +48,8 @@ base_theme <-  theme(axis.text=element_text(size=7, color = "black"),
                      strip.text = element_text(size=6, face = "bold",color = "black", hjust=0),
                      strip.background = element_blank())
 
-ggplot(clusters %>% filter(year > 2013), aes(x = year, y = perc_of_max_3,
-                                             color = incipient)) +
+ggplot(clusters %>% filter(year > 2013), aes(x = year, y = perc_of_baseline,
+                                             color = site_type)) +
   geom_point() + 
   geom_smooth(se = TRUE) +
   facet_wrap(~ site_num, scales = "free_y") + theme_bw() + base_theme
@@ -79,7 +80,7 @@ ggplot(data = cluster_coord) +
 
 
 ggplot() +
-  geom_sf(data = clusters, aes(color = incipient)) +
+  geom_sf(data = clusters, aes(color = site_type)) +
   scale_color_manual(values = c("Forest" = "#1B9E77", "Barren" = "#7570B3", "Incipient" = "#D95F02"), name = "Incipient") +
   coord_sf(crs = 4326) +
   theme_minimal() 
@@ -121,7 +122,7 @@ g1_inset <- ggplotGrob(
 
 p1 <- ggplot() +
   # Add clusters
-  geom_sf(data = clusters %>% filter(year == 2023), aes(color = incipient)) +
+  geom_sf(data = clusters %>% filter(year == 2023), aes(color = site_type)) +
   scale_color_manual(values = c("Forest" = "#1B9E77", "Barren" = "#7570B3", "Incipient" = "#D95F02"), name = "Site type") +
   geom_sf(data = ca_counties, fill = "gray", color = "gray80") +
   labs(title = "", tag = "") +
@@ -187,7 +188,7 @@ p1
 # Create a convex hull for each cluster while keeping the incipient attribute
 cluster_polygons <- clusters %>%
   filter(year == 2023) %>%
-  group_by(site_num, incipient) %>%              # group by your cluster ID and type
+  group_by(site_num, site_type) %>%              # group by your cluster ID and type
   summarize(geometry = st_combine(geometry), .groups = "drop") %>%  # combine points in each cluster
   st_convex_hull()                                # compute the convex hull
 # Compute the convex hull for each group
@@ -197,7 +198,7 @@ cluster_polygons <- clusters %>%
 p2 <- ggplot() +
   # Plot cluster polygons with the fill based on the incipient category
   geom_sf(data = cluster_polygons, 
-          aes(fill = incipient),      # fill mapped to incipient
+          aes(fill = site_type),      # fill mapped to incipient
           color = "black")+            # black border for each cluster            # optional transparency
   scale_fill_manual(values = c("Forest" = "#1B9E77", 
                                "Barren" = "#7570B3", 
@@ -280,8 +281,8 @@ base_theme <-  theme(axis.text.x=element_text(size=10, color = "black"),
 years_to_label <- seq(2014, max(clusters$year), by = 3)
 
 #Make sure to turn off year filter for landsay_build4
-p3 <- ggplot(clusters %>% filter(year > 2013), aes(x = year, y = perc_of_max_3,
-                                                         color = incipient)) +
+p3 <- ggplot(clusters %>% filter(year > 2013), aes(x = year, y = perc_of_baseline,
+                                                         color = site_type)) +
   geom_point() + 
   geom_smooth(se = TRUE) +
   scale_color_manual(values = c("Forest" = "#1B9E77", "Barren" = "#7570B3", "Incipient" = "#D95F02"), name = "Site type") +
@@ -320,11 +321,11 @@ join_polygons <- function(polys, distance = 50) {
 
 # Split the polygons by incipient type and process each group
 joined_list <- cluster_polygons_proj %>% 
-  split(.$incipient) %>% 
+  split(.$site_type) %>% 
   map(~ join_polygons(.x, distance = 50))
 
 # Add the incipient attribute back for each piece (imap gives you both the object and its name)
-joined_list <- imap(joined_list, ~ st_sf(incipient = .y, geometry = .x))
+joined_list <- imap(joined_list, ~ st_sf(site_type = .y, geometry = .x))
 
 # Combine the resulting polygons into one sf object
 joined_polygons <- do.call(rbind, joined_list)
@@ -335,7 +336,7 @@ joined_polygons <- st_transform(joined_polygons, st_crs(cluster_polygons))
 
 p4 <- ggplot() +
   # Plot the joined patches with fill by incipient type
-  geom_sf(data = joined_polygons, aes(fill = incipient), color = "black", size = 0.5
+  geom_sf(data = joined_polygons, aes(fill = site_type), color = "black", size = 0.5
           #, alpha = 0.7
           ) +
   scale_fill_manual(values = c("Forest" = "#1B9E77", 
@@ -399,9 +400,9 @@ if (!"new_cluster" %in% names(joined_polygons)) {
 }
 
 # Likewise, ensure there is an incipient column
-if (!"incipient" %in% names(joined_polygons)) {
+if (!"site_type" %in% names(joined_polygons)) {
   if ("Incipient" %in% names(joined_polygons)) {
-    joined_polygons <- joined_polygons %>% rename(incipient = Incipient)
+    joined_polygons <- joined_polygons %>% rename(site_type = Incipient)
   } else {
     stop("Error: Neither 'incipient' nor 'Incipient' exist in joined_polygons.")
   }
@@ -418,15 +419,15 @@ if ("incipient" %in% names(clusters)) {
 # ===== STEP 2: Perform the Spatial Join =====
 # Use st_intersects to include features that may touch the boundary.
 clusters_joined <- st_join(clusters_clean, 
-                           joined_polygons[, c("new_cluster", "incipient")],
+                           joined_polygons[, c("new_cluster", "site_type")],
                            join = st_intersects)
 
 # ===== STEP 3: Handle Duplicate Columns (if present) =====
 # Sometimes the join creates duplicate columns (e.g., incipient.x, incipient.y)
-if (all(c("incipient.x", "incipient.y") %in% names(clusters_joined))) {
+if (all(c("site_type.x", "site_type.y") %in% names(clusters_joined))) {
   clusters_joined <- clusters_joined %>%
-    mutate(incipient = coalesce(incipient.x, incipient.y)) %>%
-    select(-incipient.x, -incipient.y)
+    mutate(site_type = coalesce(site_type.x, site_type.y)) %>%
+    select(-site_type.x, -site_type.y)
 }
 
 # (Optional) Inspect the resulting joined dataset:
@@ -438,8 +439,8 @@ print(head(st_drop_geometry(clusters_joined)))
 # For each resolved cluster (new_cluster) and each year, calculate the mean of perc_of_max_3.
 agg_ts <- clusters_joined %>%
   group_by(new_cluster, year) %>%
-  summarise(mean_perc = mean(perc_of_max_3, na.rm = TRUE),
-            incipient = first(incipient)) %>%
+  summarise(mean_perc = mean(perc_of_baseline, na.rm = TRUE),
+            site_type = first(site_type)) %>%
   ungroup()
 
 # Optionally inspect aggregated data:
@@ -447,7 +448,7 @@ print(head(agg_ts))
 
 # ===== STEP 5: Plot the Aggregated Time Series =====
 p5 <- ggplot(agg_ts %>% filter(year > 2013),
-             aes(x = year, y = mean_perc, color = incipient, fill = incipient)) +
+             aes(x = year, y = mean_perc, color = site_type, fill = site_type)) +
   # Add a red rectangle for the 2014-2016 period:
   annotate(geom = "rect", xmin = 2014, xmax = 2016, ymin = -Inf, ymax = Inf, 
            fill = "indianred", alpha = 0.7) +
@@ -487,7 +488,7 @@ mapping <- c("23" = "1",  "11" = "2",  "24" = "3",  "12" = "4",
              "36" = "25", "16" = "26", "10" = "27", "35" = "28",
              "22" = "29", "21" = "30", "34" = "31", "33" = "32",
              "31" = "33", "1"  = "34", "32" = "35", "15" = "36",
-             "2"  = "37", "14" = "38")
+             "2"  = "37", "14" = "38") 
 
 # Recode the new_cluster field in joined_polygons:
 joined_polygons <- joined_polygons %>%
@@ -520,7 +521,7 @@ jittered_labels <- st_transform(jittered_labels, st_crs(joined_polygons))
 
 p6 <- ggplot() +
   # Plot your resolved clusters (polygons) with fill based on incipient
-  geom_sf(data = joined_polygons, aes(fill = incipient), color = "black", size = 0.5) +
+  geom_sf(data = joined_polygons, aes(fill = site_type), color = "black", size = 0.5) +
   scale_fill_manual(values = c("Forest" = "#1B9E77",
                                "Barren" = "#7570B3",
                                "Incipient" = "#D95F02"),
@@ -622,6 +623,15 @@ ggsave(p4, filename = file.path(figdir, "Fig3_clusters_convex_hull.png"),
 #save clusters resolved with convex hulls
 ggsave(p5, filename = file.path(figdir, "Fig4_cluster_timerseries.png"), 
        width = 13, height = 7.5, units = "in", dpi = 600, bg = "white") #last write 26 Sept 2024
+
+
+################################################################################
+#export layers
+
+cluster_polygons_unresolved
+
+
+
 
 
 
