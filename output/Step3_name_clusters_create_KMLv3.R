@@ -259,112 +259,20 @@ ggplot(landsat_classified, aes(x = year, y = perc_of_baseline, color = site_type
   facet_wrap(~ site_num, scales = "free_y") +
   theme_bw() +
   base_theme +
-  labs(y = "Percent of max (3-year)", color = "Site type")
-
-
-
-################################################################################
-#label incipient clusters
-
-#rename sites and create table
-landsat_build4 <- landsat_build3 %>%
-  mutate(
-    #set cluster order
-    incipient = case_when(
-      site_num == 1 ~ "Forest",
-      site_num == 2 ~ "Forest",
-      site_num == 3 ~ "Forest",
-      site_num == 4 ~ "Forest",
-      site_num == 5 ~ "Barren",
-      site_num == 6 ~ "Barren",
-      site_num == 7 ~ "Barren",
-      site_num == 8 ~ "Barren",
-      site_num == 9 ~ "Barren",
-      site_num == 10 ~ "Forest",
-      site_num == 11 ~ "Barren",
-      site_num == 12 ~ "Barren",
-      site_num == 13 ~ "Barren",
-      site_num == 14 ~ "Barren",
-      site_num == 15 ~ "Incipient",
-      site_num == 16 ~ "Incipient",
-      site_num == 17 ~ "Barren",
-      site_num == 18 ~ "Barren",
-      site_num == 19 ~ "Incipient",
-      site_num == 20 ~ "Barren",
-      site_num == 21 ~ "Barren",
-      site_num == 22 ~ "Barren",
-      site_num == 23 ~ "Incipient",
-      site_num == 24 ~ "Barren",
-      site_num == 25 ~ "Forest",
-      site_num == 26 ~ "Incipient",
-      site_num == 27 ~ "Incipient",
-      site_num == 28 ~ "Barren",
-      site_num == 29 ~ "Incipient",
-      site_num == 30 ~ "Barren",
-      site_num == 31 ~ "Barren",
-      site_num == 32 ~ "Incipient",
-      site_num == 33 ~ "Incipient",
-      site_num == 34 ~ "Incipient",
-      site_num == 35 ~ "Incipient",
-      site_num == 36 ~ "Barren",
-      site_num == 37 ~ "Barren",
-      site_num == 38 ~ "Barren",
-      site_num == 39 ~ "Forest",
-      site_num == 40 ~ "Forest",
-      site_num == 41 ~ "Forest",
-      site_num == 42 ~ "Barren",
-      site_num == 43 ~ "Incipient",
-      site_num == 44 ~ "Incipient",
-      site_num == 45 ~ "Forest",
-      site_num == 46 ~ "Forest",
-      site_num == 47 ~ "Barren",
-      site_num == 48 ~ "Forest",
-      site_num == 49 ~ "Forest",
-      site_num == 50 ~ "Forest",
-      site_num == 51 ~ "Barren",
-      site_num == 52 ~ "Forest",
-      site_num == 53 ~ "Forest",
-      site_num == 54 ~ "Barren",
-      site_num == 55 ~ "Forest",
-      site_num == 56 ~ "Incipient",
-      site_num == 57 ~ "Barren",
-      site_num == 58 ~ "Barren",
-      site_num == 59 ~ "Forest",
-      site_num == 60 ~ "Forest",
-      site_num == 61 ~ "Barren",
-      site_num == 62 ~ "Incipient",
-      site_num == 63 ~ "Forest",
-      site_num == 64 ~ "Forest",
-      site_num == 65 ~ "Incipient",
-      site_num == 66 ~ "Incipient",
-      site_num == 67 ~ "Incipient",
-      site_num == 68 ~ "Incipient",
-      site_num == 69 ~ "Barren",
-      site_num == 70 ~ "Incipient",
-      site_num == 71 ~ "Forest",
-      site_num == 72 ~ "Barren",
-      site_num == 73 ~ "Forest",
-      TRUE ~ NA)
-  ) %>%
-  left_join(., site_class,by = c("site_num" = "site_num"))
-
-# Plot 
-ggplot(landsat_build4 %>% filter(year > 2013), aes(x = year, y = perc_of_max_3,
-                                                   color = site_type)) +
-  geom_point() + 
-  geom_smooth(se = TRUE) +
-  facet_wrap(~ site_num, scales = "free_y") + theme_bw() + base_theme
+  labs(y = "Percent of baseline", color = "Site type")
 
 
 ################################################################################
 #Export named clusters
 
 # Export landsat_build4 as a GeoJSON file
-st_write(landsat_build4, file.path(output, "landsat/processed/named_clusters.geojson"), delete_dsn = TRUE)
+st_write(landsat_classified, file.path(output, "landsat/processed/named_clustersv2.geojson"), delete_dsn = TRUE)
 
 
 ################################################################################
 #prep for export to KML to visualize in Google maps
+
+##OLD
 
 # transform landsat data to Teale Albers
 
