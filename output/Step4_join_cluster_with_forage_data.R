@@ -18,6 +18,9 @@ output <- here::here("output")
 #landsat data
 clusters <- st_read(file.path(output, "/landsat/processed/named_clustersv2.geojson"))
 
+#sofa formatted data from Access
+sofa_dat <- read_xlsx(file.path(basedir, "foraging_data/raw/SOFA_Output_wlatlong_2016to2024.xlsx"))
+
 #Forage data
 forage_meta <- read_xlsx(file.path(basedir, "foraging_data/raw/ForageKey_lookup_table.xlsx"))
 for_dat <- read_csv(file.path(basedir, "foraging_data/raw/Forage_data_2016to2023.csv"))
@@ -187,11 +190,48 @@ nrow(inside_join)
 nrow(points_clean) 
 
 ################################################################################
+#Merge patch ID and sofa formatted data from Access
+
+str(cluster_polygons)
+str(sofa_dat)
+
+#Step1: drop any forage obs with missing lat/long
+points_clean <- sofa_dat %>%
+  filter(!is.na(Long), !is.na(Lat))
+
+#Step2: convert forage obs to sf
+points_sf <- st_as_sf(
+  points_clean,
+  coords = c("Long", "Lat"),
+  crs    = st_crs(cluster_polygons)
+)
+
+
+#Step3: spatial join to grab site_type for any forage obs that fall inside
+inside_join <- st_join(
+  points_sf,
+  cluster_polygons %>% select(site_type),
+  left = TRUE,
+  join = st_within
+)
+
+#Step4: for remaining points (NA site_type), find the nearest polygon:
+na_idx       <- which(is.na(inside_join$site_type))
+nearest_poly <- st_nearest_feature(inside_join[na_idx, ], cluster_polygons)
+
+#Step5: fill in those NAs from the nearest polygon’s site_type
+inside_join$site_type[na_idx] <- cluster_polygons$site_type[nearest_poly]
+
+#check that it worked
+nrow(inside_join)
+nrow(points_clean) 
+
+################################################################################
 #Export
 
 write_csv(inside_join, file = 
             file.path(basedir, 
-                      "foraging_data/processed/recovery_patches/forage_cluster_2016_22.csv")) #last write 17 April 2023
+                      "foraging_data/processed/recovery_patches/forage_cluster_2016_24.csv")) #last write 17 April 2023
 
 
 
