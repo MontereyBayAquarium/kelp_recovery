@@ -226,14 +226,27 @@ inside_join$site_type[na_idx] <- cluster_polygons$site_type[nearest_poly]
 nrow(inside_join)
 nrow(points_clean) 
 
+#rename prey types based on patch type
+inside_join2 <- inside_join %>%
+  mutate(
+    PREY2 = case_when(
+      PREY %in% c("urc", "pur", "red") & site_type == "Barren"   ~ "ren",
+      PREY %in% c("urc", "pur", "red") & site_type == "Forest"   ~ "for",
+      PREY %in% c("urc", "pur", "red") & site_type == "Incipient"~ "inc",
+      TRUE                                                        ~ PREY
+    )
+  )
+
+                  
+
 ################################################################################
 #Export
 
-write_csv(inside_join, file = 
+write_csv(inside_join2, file = 
             file.path(basedir, 
-                      "foraging_data/processed/recovery_patches/forage_cluster_2016_24.csv")) #last write 17 April 2023
+                      "foraging_data/processed/recovery_patches/forage_cluster_2016_24v2.csv")) #last write 24 April 2025
 
-
+file.
 
 
 
