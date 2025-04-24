@@ -7,6 +7,7 @@ require(librarian)
 librarian::shelf(tidyverse, ggplot2, RColorBrewer, vegan, grid)
 
 datdir <- "/Volumes/seaotterdb$/kelp_recovery/data/MBA_kelp_forest_database"
+figdir <- here::here("figures")
 
 quad_dat <- read_csv(file.path(datdir,"processed/recovery/recovery_quad.csv"))
 
@@ -242,44 +243,71 @@ bio_sig_density$nice_variable  <- nice_name(bio_sig_density$variable)
 ################################################################################
 #Plot
 
-my_theme <- theme(axis.text = element_text(size = 7, color = "black"),
-                  axis.title = element_text(size = 8, color = "black"),
-                  legend.text = element_text(size = 7, color = "black"),
-                  legend.title = element_text(size = 8, color = "black"),
-                  strip.text = element_text(size = 8, hjust = 0, face = "bold", color = "black"),
-                  strip.background = element_blank(),
-                  plot.title = element_text(size = 9, color = "black"),
-                  plot.tag = element_text(size = 9, color = "black", face = 'bold'),
-                  panel.grid.major = element_blank(), 
-                  panel.grid.minor = element_blank(),
-                  panel.background = element_blank(), 
-                  axis.line = element_line(colour = "black"),
-                  legend.key.size = unit(0.5, "cm"),
-                  legend.background = element_rect(fill = alpha('blue', 0)))
+my_theme <-  theme(axis.text.x=element_text(size=18, color = "black"),
+                   axis.text.y=element_text(size=18, color = "black"),
+                   axis.title=element_text(size=20,color = "black"),
+                   legend.text=element_text(size=18,color = "black"),
+                   legend.title=element_text(size=18,color = "black"),
+                   plot.tag=element_text(size=18,color = "black"),
+                   # Gridlines
+                   panel.grid.major = element_blank(), 
+                   panel.grid.minor = element_blank(),
+                   panel.background = element_blank(), 
+                   axis.line = element_line(colour = "black"),
+                   # Legend
+                   legend.key = element_rect(fill=alpha('blue', 0)),
+                   legend.background = element_rect(fill=alpha('blue', 0)),
+                   #facets
+                   strip.text = element_text(size=20, face = "bold",color = "black", hjust=0),
+                   strip.background = element_blank())
 
-p1 <- ggplot(scores_cover %>%
-               filter(site_type %in% c("FOR", "BAR"))
-             , aes(x = NMDS1, y = NMDS2)) +
-  stat_ellipse(aes(color = site_type), type = "norm", linetype = 1, size = 1) +
-  # geom_point(aes(color = site_type, shape = site_type), size = 3, alpha = 0.5) +
-  geom_point(data = centroids_cover %>%
-               filter(site_type %in% c("FOR", "BAR"))
-             , aes(x = NMDS1, y = NMDS2, color = site_type, shape = site_type),
-             size = 4, alpha = 1) +
+p1 <- ggplot() +
+  # individual points
+  geom_point(
+    data = scores_cover %>% filter(site_type %in% c("FOR", "BAR")),
+    aes(x = NMDS1, y = NMDS2, color = site_type, shape = site_type),
+    size = 2, alpha = 0.2
+  ) +
+  # ellipses
+  stat_ellipse(
+    data = scores_cover %>% filter(site_type %in% c("FOR", "BAR")),
+    aes(x = NMDS1, y = NMDS2, color = site_type),
+    type = "norm", linetype = 1, size = 1
+  ) +
+  # centroids
+  geom_point(
+    data = centroids_cover %>% filter(site_type %in% c("FOR", "BAR")),
+    aes(x = NMDS1, y = NMDS2, color = site_type, shape = site_type),
+    size = 4, alpha = 1
+  ) +
   scale_color_manual(values = c(
-    "FOR" = "#1B9E77",
-    "INCIP"  = "#D95F02",
-    "BAR" = "#7570B3"
+    "FOR"   = "#1B9E77",
+    "INCIP" = "#D95F02",
+    "BAR"   = "#7570B3"
   )) +
-  labs(title = "",
-       x = "NMDS1", y = "NMDS2", color = "Site Type", shape = "Site Type") +
-  theme_bw() + my_theme
+  labs(
+    x = "NMDS1",
+    y = "NMDS2",
+    color = "Site Type",
+    shape = "Site Type"
+  ) +
+  theme_bw() +
+  my_theme
 
 p1
+
+#ggsave(p1,  filename=file.path(figdir, "Fig6_NMDS_BAR_FOR.png"), width = 10, height = 7.5, units = "in",
+#       bg = "white", dpi = 600) 
 
 
 
 p2 <- ggplot(scores_cover, aes(x = NMDS1, y = NMDS2)) +
+  # individual points
+  geom_point(
+    data = scores_cover %>% filter(site_type %in% c("FOR", "BAR", "INCIP")),
+    aes(x = NMDS1, y = NMDS2, color = site_type, shape = site_type),
+    size = 2, alpha = 0.2
+  ) +
   stat_ellipse(aes(color = site_type), type = "norm", linetype = 1, size = 1) +
   # geom_point(aes(color = site_type, shape = site_type), size = 3, alpha = 0.5) +
   geom_point(data = centroids_cover, aes(x = NMDS1, y = NMDS2, color = site_type, shape = site_type),
@@ -294,6 +322,13 @@ p2 <- ggplot(scores_cover, aes(x = NMDS1, y = NMDS2)) +
   theme_bw() + my_theme
 
 p2
+
+
+#ggsave(p2,  filename=file.path(figdir, "Fig7_NMDS_BAR_FOR_INCIP.png"), width = 10, height = 7.5, units = "in",
+#       bg = "white", dpi = 600) 
+
+
+
 
 
 # Define multipliers for envfit vectors:
@@ -331,7 +366,29 @@ centroids_density <- scores_density %>%
   group_by(site_type) %>%
   summarize(NMDS1 = mean(NMDS1), NMDS2 = mean(NMDS2))
 
-p4 <- ggplot(scores_density, aes(x = NMDS1, y = NMDS2)) +
+p4 <- ggplot(scores_density %>% filter(site_type %in% c("FOR", "BAR")), aes(x = NMDS1, y = NMDS2)) +
+  stat_ellipse(aes(color = site_type), type = "norm", linetype = 1, size = 1) +
+  # Uncomment the next line to show individual points:
+  # geom_point(aes(color = site_type, shape = site_type), size = 3, alpha = 0.5) +
+  geom_point(data = centroids_density %>% filter(site_type %in% c("FOR", "BAR")), aes(x = NMDS1, y = NMDS2, color = site_type, shape = site_type),
+             size = 4, alpha = 1) +
+  scale_color_manual(values = c(
+    "FOR" = "#1B9E77",
+    "INCIP"  = "#D95F02",
+    "BAR" = "#7570B3"
+  )) +
+  labs(title = "",
+       x = "NMDS1", y = "NMDS2", color = "Site Type", shape = "Site Type") +
+  theme_bw() + my_theme
+p4
+
+
+#ggsave(p4,  filename=file.path(figdir, "Fig8_NMDS_density_FOR_BAR.png"), width = 10, height = 7.5, units = "in",
+#       bg = "white", dpi = 600) 
+
+
+
+p5 <- ggplot(scores_density, aes(x = NMDS1, y = NMDS2)) +
   stat_ellipse(aes(color = site_type), type = "norm", linetype = 1, size = 1) +
   # Uncomment the next line to show individual points:
   # geom_point(aes(color = site_type, shape = site_type), size = 3, alpha = 0.5) +
@@ -345,8 +402,11 @@ p4 <- ggplot(scores_density, aes(x = NMDS1, y = NMDS2)) +
   labs(title = "",
        x = "NMDS1", y = "NMDS2", color = "Site Type", shape = "Site Type") +
   theme_bw() + my_theme
-p4
+p5
 
+
+#ggsave(p5,  filename=file.path(figdir, "Fig9_density_BAR_FOR_INCIP.png"), width = 10, height = 7.5, units = "in",
+#       bg = "white", dpi = 600) 
 
 
 
@@ -356,7 +416,7 @@ phys_sig_density$NMDS2 <- phys_sig_density$NMDS2 * density_multiplier
 bio_sig_density$NMDS1 <- bio_sig_density$NMDS1 * density_multiplier
 bio_sig_density$NMDS2 <- bio_sig_density$NMDS2 * density_multiplier
 
-p5 <- p4 +
+p6 <- p5 +
   geom_segment(data = phys_sig_density, inherit.aes = FALSE,
                aes(x = 0, y = 0, xend = NMDS1, yend = NMDS2),
                arrow = arrow(length = unit(0.2, "cm")), color = "indianred", size = 1) +
@@ -367,13 +427,17 @@ p5 <- p4 +
                aes(x = 0, y = 0, xend = NMDS1, yend = NMDS2),
                arrow = arrow(length = unit(0.2, "cm")), color = "gray70", size = 1,
                alpha = 0.5) +
-  geom_text(data = bio_sig_density, inherit.aes = FALSE,
-            aes(x = NMDS1, y = NMDS2, label = nice_variable),
-            color = "black", vjust = -0.5, 
-            nudge_x = 0.001, nudge_y = 0.001, size = 3)+
+  #geom_text(data = bio_sig_density, inherit.aes = FALSE,
+   #         aes(x = NMDS1, y = NMDS2, label = nice_variable),
+    #        color = "black", vjust = -0.5, 
+     #       nudge_x = 0.001, nudge_y = 0.001, size = 5)+
   #coord_cartesian(clip = "off") +
   theme(plot.margin = unit(c(1, 1, 1, 1), "cm"))
-p5
+p6
+
+ggsave(p6,  filename=file.path(figdir, "Fig10_density_vectors_unlabeled.png"), width = 10, height = 7.5, units = "in",
+       bg = "white", dpi = 600) 
+
 
 ################################################################################
 #Toy with 3D nMDS
