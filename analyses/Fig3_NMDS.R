@@ -4,7 +4,7 @@ rm(list=ls())
 
 require(librarian)
 
-librarian::shelf(tidyverse, ggplot2, RColorBrewer, vegan, grid)
+librarian::shelf(tidyverse, ggplot2, RColorBrewer, vegan, grid, tidytext, forcats)
 
 datdir <- "/Volumes/seaotterdb$/kelp_recovery/data/MBA_kelp_forest_database"
 figdir <- here::here("figures")
@@ -435,186 +435,214 @@ p6 <- p5 +
   theme(plot.margin = unit(c(1, 1, 1, 1), "cm"))
 p6
 
-ggsave(p6,  filename=file.path(figdir, "Fig10_density_vectors_unlabeled.png"), width = 10, height = 7.5, units = "in",
-       bg = "white", dpi = 600) 
+#ggsave(p6,  filename=file.path(figdir, "Fig10_density_vectors_unlabeled.png"), width = 10, height = 7.5, units = "in",
+ #      bg = "white", dpi = 600) 
 
 
 ################################################################################
-#Toy with 3D nMDS
+#Testing predictor models
 
-# Full 3D NMDS with convex‐hull bubbles and all (or more) vectors
 
-# Assumes you’ve defined:
-#   density_data_complete, meta_density,
-#   physical_vars_density, density_multiplier,
-#   and your nice_name() function
+library(randomForest)
 
-library(vegan)
-library(plotly)
-library(geometry)
-library(dplyr)
 
-# 1) 3‑dimensional NMDS
-set.seed(123)
-nmds3 <- metaMDS(
-  density_data_complete,
-  distance = "euclidean",
-  k        = 3,
-  trymax   = 100
+# -----------------------------------------------------------------------------
+# 1. Prepare df_rf with ONLY your six predictors + response
+# -----------------------------------------------------------------------------
+df_rf <- meta_cover %>%
+  data.frame()%>%
+  filter(site_type %in% c("BAR", "INCIP", "FOR")) %>%
+  select(
+    site_type,
+    relief_cm,
+    risk_index,
+    purple_urchin_densitym2,
+    purple_urchin_conceiledm2,
+    red_urchin_densitym2,
+    red_urchin_conceiledm2
+  ) %>%
+  na.omit() %>%
+  mutate(site_type = factor(site_type, levels = c("BAR","INCIP","FOR"))) 
+
+
+# Double‐check that df_rf has exactly 7 columns:
+print(colnames(df_rf))
+#> [1] "site_type"                   "relief_cm"                  
+#> [3] "risk_index"                  "purple_urchin_densitym2"    
+#> [5] "purple_urchin_conceiledm2"   "red_urchin_densitym2"       
+#> [7] "red_urchin_conceiledm2"
+
+# -----------------------------------------------------------------------------
+# 2. Fit the Random Forest using an EXPLICIT formula
+# -----------------------------------------------------------------------------
+set.seed(1985)
+rf_fit <- randomForest(
+  site_type ~ relief_cm + risk_index +
+    purple_urchin_densitym2 + purple_urchin_conceiledm2 +
+    red_urchin_densitym2    + red_urchin_conceiledm2,
+  data       = df_rf,
+  ntree      = 1501,
+  importance = TRUE
 )
 
-# 2) Extract site scores and add site_type
-scr3 <- as.data.frame(scores(nmds3, display = "sites"))
-scr3$site_type <- meta_density$site_type
 
-# 3) Compute convex‐hull centroids (optional)
-centroids3 <- scr3 %>%
-  group_by(site_type) %>%
-  summarise(
-    NMDS1 = mean(NMDS1),
-    NMDS2 = mean(NMDS2),
-    NMDS3 = mean(NMDS3)
+# -----------------------------------------------------------------------------
+# 3a. Compute OOB accuracy per class
+# -----------------------------------------------------------------------------
+# rf_fit$confusion has a column "class.error" with OOB error rates
+class_error <- rf_fit$confusion[, "class.error"]
+class_acc   <- 1 - class_error
+df_acc      <- tibble(
+  site_type = names(class_acc),
+  accuracy  = class_acc
+) %>%
+  mutate(site_type = factor(site_type, levels = levels(df_rf$site_type)))
+
+# -----------------------------------------------------------------------------
+# 3b. Prepare importance data (ranked within each facet)
+# -----------------------------------------------------------------------------
+imp_full <- importance(rf_fit) %>%
+  as.data.frame() %>%
+  rownames_to_column("variable") %>%
+  select(variable, all_of(levels(df_rf$site_type))) %>%
+  pivot_longer(
+    cols      = -variable,
+    names_to  = "site_type",
+    values_to = "importance"
+  ) %>%
+  mutate(
+    site_type = factor(site_type, levels = levels(df_rf$site_type)),
+    variable  = reorder_within(variable, -importance, site_type)
   )
 
-# 4) Build matrices for manual 3D env‑fit
-scores_mat <- as.matrix(scr3[, c("NMDS1","NMDS2","NMDS3")])
-phys_mat   <- as.matrix(physical_vars_density)
-bio_mat    <- as.matrix(density_data_complete)
+# -----------------------------------------------------------------------------
+# 3c. Plot with per‐panel OOB accuracy
+# -----------------------------------------------------------------------------
 
-# 5) Compute Pearson correlations of each predictor with each axis
-cor_phys <- cor(phys_mat, scores_mat, use = "pairwise.complete.obs")
-cor_bio  <- cor(bio_mat,  scores_mat, use = "pairwise.complete.obs")
+# 1) pivot into long form
+imp_long <- importance(rf_fit) %>%
+  as.data.frame() %>%
+  rownames_to_column("variable") %>%
+  select(variable, BAR, INCIP, FOR) %>%
+  pivot_longer(-variable, names_to="site_type", values_to="importance") %>%
+  mutate(site_type = factor(site_type, levels=c("BAR","INCIP","FOR")))
 
-# 6) Scale them by your multiplier
-ar_phys3 <- cor_phys * density_multiplier
-ar_bio3  <- cor_bio  * density_multiplier
+# 2) recode to friendly labels
+imp_long <- imp_long %>%
+  mutate(variable = fct_recode(variable,
+                               "Relief"            = "relief_cm",
+                               "Risk index"        = "risk_index",
+                               "Purple density"    = "purple_urchin_densitym2",
+                               "Purple concealed"  = "purple_urchin_conceiledm2",
+                               "Red density"       = "red_urchin_densitym2",
+                               "Red concealed"     = "red_urchin_conceiledm2"
+  ))
 
-# 7) Inspect vector lengths (overall 3D correlation)
-len_phys <- sqrt(rowSums(ar_phys3^2))
-len_bio  <- sqrt(rowSums(ar_bio3^2))
-print(len_phys)
-print(len_bio)
+# 3) reorder **descending** within each site_type
+imp_long <- imp_long %>%
+  mutate(variable = reorder_within(variable, -importance, site_type))
 
-# 8) Decide which vectors to show
-# Option A: keep only those above a lowered threshold (e.g. 0.1)
-sig_phys <- ar_phys3[len_phys > 0.1, , drop = FALSE]
-sig_bio  <- ar_bio3 [len_bio  > 0.1, , drop = FALSE]
-
-# Option B: to show all vectors, uncomment these lines:
-# sig_phys <- ar_phys3
-# sig_bio  <- ar_bio3
-
-# 9) Colors for site types
-type_colors <- c("FOR" = "#1B9E77", "INCIP" = "#D95F02", "BAR" = "#7570B3")
-
-# 10) Start empty Plotly canvas
-p3d <- plot_ly()
-
-# 11) Add convex‐hull mesh “bubbles” per site_type
-for (st in unique(scr3$site_type)) {
-  pts  <- filter(scr3, site_type == st)[, c("NMDS1","NMDS2","NMDS3")]
-  hull <- convhulln(as.matrix(pts), options = "Qt")
-  p3d <- p3d %>% add_trace(
-    type       = "mesh3d",
-    x          = pts$NMDS1,
-    y          = pts$NMDS2,
-    z          = pts$NMDS3,
-    i          = hull[,1] - 1,
-    j          = hull[,2] - 1,
-    k          = hull[,3] - 1,
-    opacity    = 0.2,
-    color      = type_colors[st],
-    name       = st,
-    showlegend = TRUE
+# 4) plot
+imp_long %>%
+  ggplot(aes(x = variable, y = importance, fill = site_type)) +
+  geom_col() +
+  facet_wrap(~ site_type, scales = "free_x", nrow = 1) +
+  tidytext::scale_x_reordered() +
+  scale_fill_manual(values = site_type_colors) +
+  geom_text(
+    data = df_acc,
+    aes(x = Inf, y = Inf, label = paste0("OOB acc = ", round(accuracy,2))),
+    inherit.aes = FALSE, hjust = 1.1, vjust = 1.1,
+    fontface = "bold", size = 3
+  ) +
+  labs(
+    x     = "Variable",
+    y     = "Class-specific Importance",
+    title = "Variable Importance by Site Type\n(with OOB accuracy)"
+  ) +
+  theme_bw(base_size = 14) +
+  my_theme +
+  theme(
+    axis.text.x     = element_text(angle = 45, hjust = 1),
+    legend.position = "none"
   )
-}
 
-# 12) (Optional) add centroids as markers
-p3d <- p3d %>% add_trace(
-  data       = centroids3,
-  x          = ~NMDS1, y = ~NMDS2, z = ~NMDS3,
-  type       = "scatter3d",
-  mode       = "markers",
-  marker     = list(size = 8, symbol = "diamond", opacity = 1),
-  inherit    = FALSE,
-  showlegend = FALSE
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# -----------------------------------------------------------------------------
+# 4. Multi‐class partial‐dependence curves for all three site types
+# -----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
+# 4. Multi‐class partial‐dependence curves with pretty variable names
+# -----------------------------------------------------------------------------
+
+# define your pretty labels
+var_labels <- c(
+  "relief_cm"                 = "Relief",
+  "risk_index"                = "Risk index",
+  "purple_urchin_densitym2"   = "Purple density",
+  "purple_urchin_conceiledm2" = "Purple concealed",
+  "red_urchin_densitym2"      = "Red density",
+  "red_urchin_conceiledm2"    = "Red concealed"
 )
 
-# 13) Add physical vectors as red lines
-for (i in seq_len(nrow(sig_phys))) {
-  df_vec <- data.frame(
-    x = c(0, sig_phys[i,1]),
-    y = c(0, sig_phys[i,2]),
-    z = c(0, sig_phys[i,3])
-  )
-  p3d <- p3d %>% add_trace(
-    data       = df_vec,
-    x          = ~x, y = ~y, z = ~z,
-    type       = "scatter3d",
-    mode       = "lines",
-    line       = list(color = "indianred", width = 4),
-    inherit    = FALSE,
-    showlegend = FALSE
-  )
-}
+# a) define predictors and compute baseline at median of each
+predictors <- setdiff(names(df_rf), "site_type")
+baseline   <- df_rf %>%
+  summarise(across(all_of(predictors), median, na.rm = TRUE))
 
-# 14) Add labels for physical vectors
-df_phys_lbl <- data.frame(
-  x   = sig_phys[,1],
-  y   = sig_phys[,2],
-  z   = sig_phys[,3],
-  txt = nice_name(rownames(sig_phys))
-)
-p3d <- p3d %>% add_trace(
-  data         = df_phys_lbl,
-  x            = ~x, y = ~y, z = ~z, text = ~txt,
-  type         = "scatter3d",
-  mode         = "text",
-  textposition = "top right",
-  inherit      = FALSE,
-  showlegend   = FALSE
+# b) class labels
+classes <- levels(df_rf$site_type)
+
+# c) build tibble of predicted probabilities
+pd_all <- map_dfr(predictors, function(var) {
+  vals    <- seq(min(df_rf[[var]], na.rm=TRUE),
+                 max(df_rf[[var]], na.rm=TRUE),
+                 length.out = 50)
+  newdata <- map_df(vals, ~ mutate(baseline, !!var := .x))
+  probmat <- predict(rf_fit, newdata=newdata, type="prob")
+  as_tibble(probmat) %>%
+    mutate(value = vals, variable = var) %>%
+    pivot_longer(cols     = all_of(classes),
+                 names_to = "site_type",
+                 values_to= "prob")
+})
+
+# recode raw variable names to pretty ones
+pd_all <- pd_all %>%
+  mutate(variable = recode(variable, !!!var_labels))
+
+# site‐type colors
+site_type_colors <- c(
+  "FOR"   = "#1B9E77",
+  "INCIP" = "#D95F02",
+  "BAR"   = "#7570B3"
 )
 
-# 15) Add biological vectors as gray lines
-for (i in seq_len(nrow(sig_bio))) {
-  df_vec <- data.frame(
-    x = c(0, sig_bio[i,1]),
-    y = c(0, sig_bio[i,2]),
-    z = c(0, sig_bio[i,3])
-  )
-  p3d <- p3d %>% add_trace(
-    data       = df_vec,
-    x          = ~x, y = ~y, z = ~z,
-    type       = "scatter3d",
-    mode       = "lines",
-    line       = list(color = "gray70", width = 2),
-    inherit    = FALSE,
-    showlegend = FALSE
-  )
-}
-
-# 16) Add labels for biological vectors
-df_bio_lbl <- data.frame(
-  x   = sig_bio[,1],
-  y   = sig_bio[,2],
-  z   = sig_bio[,3],
-  txt = nice_name(rownames(sig_bio))
-)
-p3d <- p3d %>% add_trace(
-  data         = df_bio_lbl,
-  x            = ~x, y = ~y, z = ~z, text = ~txt,
-  type         = "scatter3d",
-  mode         = "text",
-  textposition = "bottom left",
-  inherit      = FALSE,
-  showlegend   = FALSE
-)
-
-# 17) Final layout
-p3d %>% layout(
-  scene = list(
-    xaxis = list(title = "NMDS1"),
-    yaxis = list(title = "NMDS2"),
-    zaxis = list(title = "NMDS3")
-  )
-)
+# d) plot
+pd_all %>%
+  ggplot(aes(x=value, y=prob, color=site_type)) +
+  facet_wrap(~variable, scales="free", ncol=2) +
+  geom_line(size=1) +
+  labs(
+    x     = "Predictor value",
+    y     = "Predicted probability",
+    color = "Site type",
+    title = "Partial Dependence of P(site_type) on Each Predictor"
+  ) +
+  scale_color_manual(values=site_type_colors) +
+  theme_bw(base_size=12) +
+  my_theme
