@@ -652,6 +652,11 @@ p1_scaled <- imp_long_scaled %>%
 p1_scaled
 
 
+ggsave(p1_scaled,  filename=file.path(figdir, "Fig12_RFmodel_barplot.png"), width = 7, height = 4, units = "in",
+       bg = "white", dpi = 600) 
+
+
+
 
 # -----------------------------------------------------------------------------
 # 4. Multi‐class partial‐dependence curves for all three site types
@@ -719,6 +724,11 @@ p2 <- pd_all %>%
   theme(legend.position = "bottom")
 
 p2
+
+
+ggsave(p2,  filename=file.path(figdir, "Fig13_RFmodel_trends.png"), width = 7, height = 5, units = "in",
+       bg = "white", dpi = 600) 
+
 
 
 p <- ggpubr::ggarrange(p1_scaled, p2, ncol=1)
