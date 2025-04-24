@@ -496,7 +496,11 @@ df_acc      <- tibble(
   site_type = names(class_acc),
   accuracy  = class_acc
 ) %>%
-  mutate(site_type = factor(site_type, levels = levels(df_rf$site_type)))
+  mutate(site_type = factor(site_type, levels = levels(df_rf$site_type)),
+         site_type = fct_recode(site_type,
+                                "Barren"            = "BAR",
+                                "Forest"        = "FOR",
+                                "Incipient"    = "INCIP"))
 
 # -----------------------------------------------------------------------------
 # 3b. Prepare importance data (ranked within each facet)
@@ -536,14 +540,46 @@ imp_long <- imp_long %>%
                                "Purple concealed"  = "purple_urchin_conceiledm2",
                                "Red density"       = "red_urchin_densitym2",
                                "Red concealed"     = "red_urchin_conceiledm2"
-  ))
+  ),
+  site_type = fct_recode(site_type,
+                        "Barren"            = "BAR",
+                        "Forest"        = "FOR",
+                        "Incipient"    = "INCIP"))
 
 # 3) reorder **descending** within each site_type
 imp_long <- imp_long %>%
   mutate(variable = reorder_within(variable, -importance, site_type))
 
+
+# site‐type colors
+site_type_colors <- c(
+  "Forest"   = "#1B9E77",
+  "Incipient" = "#D95F02",
+  "Barren"   = "#7570B3"
+)
+
+
+
+my_theme2 <-  theme(axis.text.x=element_text(size=14, color = "black"),
+                   axis.text.y=element_text(size=14, color = "black"),
+                   axis.title=element_text(size=16,color = "black"),
+                   legend.text=element_text(size=14,color = "black"),
+                   legend.title=element_text(size=14,color = "black"),
+                   plot.tag=element_text(size=14,color = "black"),
+                   # Gridlines
+                   panel.grid.major = element_blank(), 
+                   panel.grid.minor = element_blank(),
+                   panel.background = element_blank(), 
+                   axis.line = element_line(colour = "black"),
+                   # Legend
+                   legend.key = element_rect(fill=alpha('blue', 0)),
+                   legend.background = element_rect(fill=alpha('blue', 0)),
+                   #facets
+                   strip.text = element_text(size=14, face = "bold",color = "black", hjust=0),
+                   strip.background = element_blank())
+
 # 4) plot
-imp_long %>%
+p1 <- imp_long %>%
   ggplot(aes(x = variable, y = importance, fill = site_type)) +
   geom_col() +
   facet_wrap(~ site_type, scales = "free_x", nrow = 1) +
@@ -567,17 +603,53 @@ imp_long %>%
     legend.position = "none"
   )
 
+p1
 
 
 
 
+# -----------------------------------------------------------------------------
+# Scale class‐specific importance to [0,1] within each site_type
+# -----------------------------------------------------------------------------
+imp_long_scaled <- imp_long %>%
+  group_by(site_type) %>%
+  mutate(importance = importance / max(importance)) %>%
+  ungroup()
 
+# -----------------------------------------------------------------------------
+# Plot with scaled importance
+# -----------------------------------------------------------------------------
+p1_scaled <- imp_long_scaled %>%
+  ggplot(aes(x = variable, y = importance, fill = site_type)) +
+  geom_col() +
+  facet_wrap(~ site_type, scales = "free_x", nrow = 1) +
+  tidytext::scale_x_reordered() +
+  scale_fill_manual(values = site_type_colors) +
+  geom_text(
+    data = df_acc,
+    aes(
+      x     = Inf,
+      y     = Inf,
+      label = paste0("OOB = ", round(accuracy, 2))
+    ),
+    inherit.aes = FALSE,
+    hjust       = 1.1,
+    vjust       = 1.1,
+    size        = 5
+  ) +
+  labs(
+    x     = "Variable",
+    y     = "Class-specific importance \n (scaled to max))",
+    title = ""
+  ) +
+  theme_bw(base_size = 14) +
+  my_theme2 +
+  theme(
+    axis.text.x     = element_text(angle = 45, hjust = 1),
+    legend.position = "none"
+  )
 
-
-
-
-
-
+p1_scaled
 
 
 
@@ -623,26 +695,45 @@ pd_all <- map_dfr(predictors, function(var) {
 
 # recode raw variable names to pretty ones
 pd_all <- pd_all %>%
-  mutate(variable = recode(variable, !!!var_labels))
+  mutate(variable = recode(variable, !!!var_labels),
+         site_type = fct_recode(site_type,
+                                "Barren"            = "BAR",
+                                "Forest"        = "FOR",
+                                "Incipient"    = "INCIP"))
 
-# site‐type colors
-site_type_colors <- c(
-  "FOR"   = "#1B9E77",
-  "INCIP" = "#D95F02",
-  "BAR"   = "#7570B3"
-)
 
 # d) plot
-pd_all %>%
+p2 <- pd_all %>%
   ggplot(aes(x=value, y=prob, color=site_type)) +
-  facet_wrap(~variable, scales="free", ncol=2) +
-  geom_line(size=1) +
+  facet_wrap(~variable, scales="free", ncol=3) +
+  geom_line(size=1.5) +
   labs(
     x     = "Predictor value",
-    y     = "Predicted probability",
+    y     = "Partial effect",
     color = "Site type",
-    title = "Partial Dependence of P(site_type) on Each Predictor"
+    title = ""
   ) +
   scale_color_manual(values=site_type_colors) +
   theme_bw(base_size=12) +
-  my_theme
+  my_theme2 +
+  theme(legend.position = "bottom")
+
+p2
+
+
+p <- ggpubr::ggarrange(p1_scaled, p2, ncol=1)
+
+
+ggsave(p,  filename=file.path(figdir, "Fig11_RFmodel.png"), width = 7, height = 9, units = "in",
+      bg = "white", dpi = 600) 
+
+
+
+
+
+
+
+
+
+
+
