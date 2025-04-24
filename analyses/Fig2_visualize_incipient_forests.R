@@ -15,8 +15,17 @@ figdir <- here::here("figures")
 output <- here::here("output")
 
 #read landsat 
-clusters <- st_read(file.path(output, "/landsat/processed/named_clusters.geojson")) #old clustering
+#clusters <- st_read(file.path(output, "/landsat/processed/named_clusters.geojson")) #old clustering
 clusters <- st_read(file.path(output, "/landsat/processed/named_clustersv2.geojson"))
+
+#read sofa
+sofa <- read_excel(file.path(basedir, "sofa_data/raw/urchin_param_2016_2024_bysite.xlsx"))
+
+sofa_prox <- read_excel(file.path(basedir, "sofa_data/raw/urchinsites_wproxies_2016_2024.xlsx")) 
+#Sofa prox was ran using red, pur, urc = barren, incipient, or forest. 
+
+sofa_urch_prox <- read_excel(file.path(basedir, "sofa_data/raw/urchinsites_STPUasproxy_2016_2024.xlsx")) 
+  
 
 #read state
 ca_counties <- st_read(file.path(basedir, "gis_data/raw/ca_county_boundaries/s7vc7n.shp")) 
@@ -258,12 +267,12 @@ p2
 
 
 # Theme
-base_theme <-  theme(axis.text.x=element_text(size=10, color = "black"),
-                     axis.text.y=element_text(size=9, color = "black"),
-                     axis.title=element_text(size=12,color = "black"),
-                     legend.text=element_text(size=7,color = "black"),
-                     legend.title=element_text(size=8,color = "black"),
-                     plot.tag=element_text(size=8,color = "black"),
+base_theme <-  theme(axis.text.x=element_text(size=16, color = "black"),
+                     axis.text.y=element_text(size=16, color = "black"),
+                     axis.title=element_text(size=18,color = "black"),
+                     legend.text=element_text(size=12,color = "black"),
+                     legend.title=element_text(size=12,color = "black"),
+                     plot.tag=element_text(size=16,color = "black"),
                      # Gridlines
                      panel.grid.major = element_blank(), 
                      panel.grid.minor = element_blank(),
@@ -273,7 +282,7 @@ base_theme <-  theme(axis.text.x=element_text(size=10, color = "black"),
                      legend.key = element_rect(fill=alpha('blue', 0)),
                      legend.background = element_rect(fill=alpha('blue', 0)),
                      #facets
-                     strip.text = element_text(size=12, face = "bold",color = "black", hjust=0),
+                     strip.text = element_text(size=18, face = "bold",color = "black", hjust=0),
                      strip.background = element_blank())
 
 
@@ -296,8 +305,177 @@ p3 <- ggplot(clusters %>% filter(year > 2013), aes(x = year, y = perc_of_baselin
 p3
 
 
+p_type <- ggplot(
+  clusters %>% filter(year > 2013),
+  aes(x = year, y = perc_of_baseline)
+) +
+  # explicitly use shape = 16 and alpha
+  geom_point(
+    aes(color = site_type),
+    shape = 16,    # solid circle
+    size  = 1,
+    alpha = 0.01
+  ) +
+  geom_smooth(
+    aes(color = site_type),
+    se   = TRUE,
+    size = 1
+  ) +
+  scale_color_manual(
+    values = c(
+      "Forest"    = "#1B9E77",
+      "Barren"    = "#7570B3",
+      "Incipient" = "#D95F02"
+    ),
+    name = "Site type"
+  ) +
+  geom_hline(
+    yintercept = 0.1,
+    linetype   = "dashed",
+    color      = "black"
+  ) +
+  facet_wrap(~ site_type, scales = "free_y") +
+  scale_x_continuous(breaks = years_to_label) +
+  coord_cartesian(ylim = c(0, 1)) +
+  # Add a red rectangle for the 2014-2016 period:
+  annotate(geom = "rect", xmin = 2014, xmax = 2016, ymin = -Inf, ymax = Inf, 
+           fill = "indianred", alpha = 0.2) +
+  labs(
+    x = "Year",
+    y = "Percent of baseline (1990-2013)"
+  ) +
+  theme_bw() +
+  base_theme + theme(legend.position = "none")
+
+p_type
+
+
+
+# define breaks every 3 years
+years_to_label <- seq(2014, max(clusters$year), by = 3)
+
+
+
+sofa_plot <- sofa_prox %>% 
+  ## 1. keep the parameter of interest
+  filter(param == "Proportion of diet (biomass consumed) made up of prey type j, group g") %>% 
+  
+  ## 2. composition within each year  ---- (group by year)
+  group_by(year) %>% 
+  mutate(relative_effort = mean / sum(mean, na.rm = TRUE)) %>% 
+  ungroup() %>% 
+  ## 3. *then* normalise within each habitat  ---- (group by site_type)
+  group_by(site_type) %>% 
+  mutate(
+    rel_0to1 = scales::rescale(relative_effort, to = c(0, 1), na.rm = TRUE),
+    rel_center = (relative_effort - mean(relative_effort, na.rm = TRUE))*2 + 0.5
+  ) %>% 
+  ungroup()  %>% 
+  ## 4. drop pandemic years
+  filter(!year %in% c(2020, 2021))
+
+
+  
+
+p_type <- ggplot(
+  clusters %>% filter(year > 2013),
+  aes(x = year, y = perc_of_baseline)
+) +
+  # points (faded by alpha)
+  geom_point(
+    aes(color = site_type),
+    shape = 16,
+    size  = 1,
+    alpha = 0.01
+  ) +
+  # site‐type trend ribbons
+  geom_smooth(
+    aes(color = site_type),
+    se   = TRUE,
+    size = 1
+  ) +
+  # overlay mean‐lines from sofa
+  #geom_line(
+  #  data     = sofa_plot,
+  #  aes(x = year, y = relative_effort, group = site_type),
+  #  color    = "black",
+  #  linetype = "solid",
+  #  size     = 1
+  #) +
+  # horizontal reference at 0.1
+  geom_hline(
+    yintercept = 0.1,
+    linetype   = "dashed",
+    color      = "black"
+  ) +
+  # shaded rectangle for 2014–2016
+  annotate(
+    geom = "rect",
+    xmin = 2014, xmax = 2016,
+    ymin = -Inf, ymax = Inf,
+    fill = "indianred",
+    alpha = 0.2
+  ) +
+  # site‐type colours
+  scale_color_manual(
+    values = c(
+      "Forest"    = "#1B9E77",
+      "Barren"    = "#7570B3",
+      "Incipient" = "#D95F02"
+    ),
+    name = "Site type"
+  ) +
+  facet_wrap(~ site_type, scales = "free_y") +
+  scale_x_continuous(breaks = years_to_label) +
+  coord_cartesian(ylim = c(0, 1)) +
+  labs(
+    x = "Year",
+    y = "Percent of baseline (1990–2013)"
+  ) +
+  theme_bw() +
+  base_theme +
+  theme(legend.position = "none")
+
+#p_type
+
+p_type_loess <- p_type +
+  #geom_smooth(
+  #  data    = sofa_plot,
+  #  aes(x=year, y=rel_center),
+  #  method = "loess",
+  #  span   = 0.8,
+  #  se     = FALSE,
+  #  color  = "black",
+  #  size   = 1
+  #)+
+  geom_smooth(
+    data    = sofa_plot,
+    aes(x = year, y = rel_center),
+    method   = "gam",
+    formula  = y ~ s(x, k = 3),   # only 3 knots
+    se       = TRUE,
+    color    = "black",
+    size     = 1,
+    method.args = list(gamma = 0.5),
+    alpha = 0.2
+  ) +
+  geom_hline(yintercept=0.5)
+
+p_type_loess
+
+
+
+
+
+
 #ggsave(p2,  filename=file.path(figdir, "Cluster_timeseries.png"), width = 16, height = 10, units = "in",
 #      bg = "white", dpi = 600)
+
+ggsave(p_type,  filename=file.path(figdir, "Fig5_site_type_timeseries.png"), width = 13.33, height = 7.5, units = "in",
+      bg = "white", dpi = 600)
+
+ggsave(p_type_loess,  filename=file.path(figdir, "Fig5_site_type_timeseries_sofa.png"), width = 13.33, height = 7.5, units = "in",
+       bg = "white", dpi = 600)
 
 
 ################################################################################
