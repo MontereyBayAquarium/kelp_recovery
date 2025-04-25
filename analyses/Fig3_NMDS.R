@@ -652,8 +652,8 @@ p1_scaled <- imp_long_scaled %>%
 p1_scaled
 
 
-ggsave(p1_scaled,  filename=file.path(figdir, "Fig12_RFmodel_barplot.png"), width = 7, height = 4, units = "in",
-       bg = "white", dpi = 600) 
+#ggsave(p1_scaled,  filename=file.path(figdir, "Fig12_RFmodel_barplot.png"), width = 7, height = 4, units = "in",
+ #      bg = "white", dpi = 600) 
 
 
 
@@ -726,24 +726,98 @@ p2 <- pd_all %>%
 p2
 
 
-ggsave(p2,  filename=file.path(figdir, "Fig13_RFmodel_trends.png"), width = 7, height = 5, units = "in",
-       bg = "white", dpi = 600) 
+#ggsave(p2,  filename=file.path(figdir, "Fig13_RFmodel_trends.png"), width = 7, height = 5, units = "in",
+ #      bg = "white", dpi = 600) 
 
 
 
 p <- ggpubr::ggarrange(p1_scaled, p2, ncol=1)
 
 
-ggsave(p,  filename=file.path(figdir, "Fig11_RFmodel.png"), width = 7, height = 9, units = "in",
-      bg = "white", dpi = 600) 
+#ggsave(p,  filename=file.path(figdir, "Fig11_RFmodel.png"), width = 7, height = 9, units = "in",
+ #     bg = "white", dpi = 600) 
 
 
+################################################################################
+#IG Reel
+
+my_theme3 <-  theme(axis.text.x=element_text(size=42, color = "black"),
+                    axis.text.y=element_text(size=42, color = "black"),
+                    axis.title=element_text(size=44,color = "black"),
+                    legend.text=element_text(size=42,color = "black"),
+                    legend.title=element_text(size=42,color = "black"),
+                    plot.tag=element_text(size=42,color = "black"),
+                    # Gridlines
+                    panel.grid.major = element_blank(), 
+                    panel.grid.minor = element_blank(),
+                    panel.background = element_blank(), 
+                    axis.line = element_line(colour = "black"),
+                    # Legend
+                    legend.key = element_rect(fill=alpha('blue', 0)),
+                    legend.background = element_rect(fill=alpha('blue', 0)),
+                    legend.key.width = unit(4,"cm"),
+                    legend.key.height = unit(2,"cm"),
+                    #facets
+                    strip.text = element_text(size=42, face = "bold",color = "black", hjust=0),
+                    strip.background = element_blank())
 
 
+# 1) subset and relabel only the two panels & classes
+pd_anim <- pd_all %>%
+  filter(
+    variable  %in% c("Purple concealed", "Purple density"),
+    site_type %in% c("Barren","Forest")
+  ) %>%
+  # 2) rename for output
+  mutate(variable = recode(variable,
+                           "Purple concealed" = "Sea urchin behavior",
+                           "Purple density"   = "Sea urchin density"
+  )) %>%
+# 3) normalize the x‐axis for synchronized animation
+  group_by(variable) %>%
+  mutate(
+    t = (value - min(value)) / (max(value) - min(value))
+  ) %>%
+  ungroup()
+
+# — build a big, tall plot with large text —
+p_anim <- ggplot(pd_anim,
+                 aes(x = value, y = prob,
+                     color = site_type, group = site_type)) +
+  geom_line(size = 5) +
+  facet_wrap(~ variable, ncol = 1, scales = "free_x") +
+  scale_color_manual(values = c(
+    "Forest" = "#1B9E77",
+    "Barren" = "#7570B3"
+  )) +
+  labs(
+    x     = "Density (no. per m²)",
+    y     = "Relative importance",
+    color = "Patch type"
+  ) +
+  theme_bw() +
+  transition_reveal(along = t) +
+  ease_aes('linear')+
+  my_theme3
+
+# — animate with av (H.264/MP4) at 1080×1920 for Instagram Reels —
+anim_mp4 <- gganimate::animate(
+  p_anim,
+  nframes  = 100,
+  fps      = 8,
+  width    = 1080,
+  height   = 1620,
+  renderer = av_renderer()
+)
+
+#anim_save("sea_urchin_behav_vs_density_reel.gif", anim)
+
+anim_save(
+  filename  = "/Users/jossmith/Downloads/sea_urchin_behav_vs_density_reelv11.mp4",
+  animation = anim_mp4
+)
 
 
-
-
-
+################################################################################
 
 
