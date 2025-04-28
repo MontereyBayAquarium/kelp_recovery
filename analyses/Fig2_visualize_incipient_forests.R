@@ -21,7 +21,7 @@ clusters <- st_read(file.path(output, "/landsat/processed/named_clustersv2.geojs
 #read sofa
 sofa <- read_excel(file.path(basedir, "sofa_data/raw/urchin_param_2016_2024_bysite.xlsx"))
 
-sofa_prox <- read_excel(file.path(basedir, "sofa_data/raw/urchinsites_wproxies_2016_2024.xlsx")) 
+sofa_prox <- read_excel(file.path(basedir, "sofa_data/raw/urchinsites_wproxies_2016_2024.xlsx")) #snail as proxy for barren
 #Sofa prox was ran using red, pur, urc = barren, incipient, or forest. 
 
 sofa_urch_prox <- read_excel(file.path(basedir, "sofa_data/raw/urchinsites_STPUasproxy_2016_2024.xlsx")) 
@@ -355,8 +355,8 @@ p_type
 years_to_label <- seq(2014, max(clusters$year), by = 3)
 
 
-
-sofa_plot <- sofa_prox %>% 
+###Plot snails as proxy but normalize
+sofa_urch_norm <- sofa_prox %>% 
   ## 1. keep the parameter of interest
   filter(param == "Proportion of diet (biomass consumed) made up of prey type j, group g") %>% 
   
@@ -371,6 +371,30 @@ sofa_plot <- sofa_prox %>%
     rel_center = (relative_effort - mean(relative_effort, na.rm = TRUE))*2 + 0.5
   ) %>% 
   ungroup()  %>% 
+  ## 4. drop pandemic years
+  filter(!year %in% c(2020, 2021))
+
+###Plot snails as proxy for barren-- raw
+sofa_urch_raw <- sofa_prox%>% 
+  ## 1. keep the parameter of interest
+  filter(param == "Proportion of diet (biomass consumed) made up of prey type j, group g") %>% 
+  
+  ## 2. composition within each year  ---- (group by year)
+  group_by(year) %>% 
+  mutate(relative_effort = mean / sum(mean, na.rm = TRUE)) %>% 
+  ungroup() %>% 
+  ## 4. drop pandemic years
+  filter(!year %in% c(2020, 2021))
+
+###Plot purps as proxy for all -- raw
+sofa_urch_prox_raw <- sofa_urch_prox %>% 
+  ## 1. keep the parameter of interest
+  filter(param == "Proportion of diet (biomass consumed) made up of prey type j, group g") %>% 
+  
+  ## 2. composition within each year  ---- (group by year)
+  group_by(year) %>% 
+  mutate(relative_effort = mean / sum(mean, na.rm = TRUE)) %>% 
+  ungroup() %>% 
   ## 4. drop pandemic years
   filter(!year %in% c(2020, 2021))
 
@@ -430,7 +454,7 @@ p_type <- ggplot(
   coord_cartesian(ylim = c(0, 1)) +
   labs(
     x = "Year",
-    y = "Percent of baseline (1990–2013)"
+    y = "Percent of kelp baseline (1990–2013) \n or relative foraging effort"
   ) +
   theme_bw() +
   base_theme +
@@ -448,8 +472,9 @@ p_type_loess <- p_type +
   #  color  = "black",
   #  size   = 1
   #)+
+  #  #for urch as prox, normalized
   geom_smooth(
-    data    = sofa_plot,
+    data    = sofa_urch_norm,
     aes(x = year, y = rel_center),
     method   = "gam",
     formula  = y ~ s(x, k = 3),   # only 3 knots
@@ -459,22 +484,45 @@ p_type_loess <- p_type +
     method.args = list(gamma = 0.5),
     alpha = 0.2
   ) +
+#snails as proxy for barren urch
+#geom_smooth(
+#  data    = sofa_urch_raw,
+#  #for urch as prox, normalized
+#  aes(x = year, y = relative_effort),
+#  method   = "gam",
+#  formula  = y ~ s(x, k = 3),   # only 3 knots
+#  se       = TRUE,
+#  color    = "black",
+#  size     = 1,
+#  method.args = list(gamma = 0.5),
+ # alpha = 0.2
+#) +
+  #purps as proxy for all
+ # geom_smooth(
+#    data    = sofa_urch_prox_raw,
+#    #for urch as prox, normalized
+#    aes(x = year, y = relative_effort),
+#    method   = "gam",
+#    formula  = y ~ s(x, k = 3),   # only 3 knots
+#    se       = TRUE,
+#    color    = "black",
+#    size     = 1,
+#    method.args = list(gamma = 0.5),
+#    alpha = 0.2
+#  ) +
   geom_hline(yintercept=0.5)
 
 p_type_loess
 
 
 
-
-
-
 #ggsave(p2,  filename=file.path(figdir, "Cluster_timeseries.png"), width = 16, height = 10, units = "in",
 #      bg = "white", dpi = 600)
 
-ggsave(p_type,  filename=file.path(figdir, "Fig5_site_type_timeseries.png"), width = 13.33, height = 7.5, units = "in",
-      bg = "white", dpi = 600)
+#ggsave(p_type,  filename=file.path(figdir, "Fig5_site_type_timeseries.png"), width = 13.33, height = 7.5, units = "in",
+ #     bg = "white", dpi = 600)
 
-ggsave(p_type_loess,  filename=file.path(figdir, "Fig5_site_type_timeseries_sofa.png"), width = 13.33, height = 7.5, units = "in",
+ggsave(p_type_loess,  filename=file.path(figdir, "Fig5_sofa_snail_prox_normalized.png"), width = 13.33, height = 7.5, units = "in",
        bg = "white", dpi = 600)
 
 
