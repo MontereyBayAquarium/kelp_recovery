@@ -175,7 +175,7 @@ base_theme <-  theme(axis.text=element_text(size=7, color = "black"),
 
 
 # Plot 
-ggplot(landsat_build3 %>% filter(year > 2013), aes(x = year, y = perc_of_baseline)) +
+ggplot(landsat_build3, aes(x = year, y = perc_of_baseline)) +
   geom_point() + 
   geom_smooth(se = TRUE) +
   facet_wrap(~ site_num, scales = "free_y") + theme_bw() + base_theme
@@ -203,7 +203,7 @@ ggplot(landsat_build3 %>% filter(year > 2013), aes(x = year, y = perc_of_baselin
 #  }
 #}
 
-classify_site <- function(values, threshold = 0.1) {
+classify_site <- function(values, threshold = 0.05) {
   if (!any(values < threshold)) {
     return("Forest")
   }
@@ -249,7 +249,7 @@ print(site_class)
 
 # Merge the classification back into the main dataset
 landsat_classified <- landsat_build3 %>%
-  filter(year > 2013) %>%
+  #filter(year > 2013) %>%
   left_join(site_class, by = "site_num")
 
 # Plot percent of max for each site, colored by site type

@@ -46,6 +46,8 @@ foreign <- rnaturalearth::ne_countries(country=c("Canada", "Mexico"), returnclas
 # Join landsat data with cluster ID
 
 landsat_build1 <- left_join(landsat_orig, landsat_hclust, by = c("latitude","longitude")) %>%
+  #filter to 10 years before MHW
+  filter(year.x > 2003)%>%
   #drop sites outside of cluster assigments
   filter(!(is.na(cluster)))
 
@@ -57,6 +59,7 @@ landsat_build1 <- left_join(landsat_orig, landsat_hclust, by = c("latitude","lon
 summarized_data <- landsat_build1 %>%
   filter(quarter.x == 3)%>%
   group_by(year.x, cluster)%>%
+  #calcualte total canopy area per cluster
   summarize(total_area = sum(area.x, na.rm = TRUE))%>%
   #smooth using rolling avg
   arrange(cluster, year.x) %>%
@@ -68,11 +71,12 @@ summarized_data <- landsat_build1 %>%
                                  fill = NA, align = "center", partial = TRUE)
   )
 
-#find the max cluster area for the 2005-2013 period
+#find the max cluster area pre-MHW
 max_cluster_area <- summarized_data %>%
-  filter(year.x > 2004 & year.x < 2014)%>%
+  filter(year.x < 2014)%>%
   group_by(cluster)%>%
   summarize(area_baseline_mean = mean(total_area),
+            area_baseline_sd = sd(total_area),
             area_max_3 = max(roll_area_3),
             area_max_5 = max(roll_area_5))
 
@@ -86,9 +90,11 @@ area_data <- st_join(summarized_data, max_cluster_area) %>%
   )%>%
   mutate(perc_of_baseline = (roll_area_3 / area_baseline_mean),
          perc_of_max_3 = (roll_area_3 / area_max_3)*100,
-         perc_of_max_5 = (roll_area_5 / area_max_5)*100)%>%
+         perc_of_max_5 = (roll_area_5 / area_max_5)*100,
+         z_score_baseline = (roll_area_3 - area_baseline_mean) / area_baseline_sd
+         )%>%
   select(year, cluster, total_area,perc_of_baseline, perc_of_max_3,
-         perc_of_max_5, geometry)
+         perc_of_max_5, z_score_baseline, geometry)
 
 plot(area_data %>% filter(year == 2023))
 
@@ -97,7 +103,8 @@ plot(area_data %>% filter(year == 2023))
 
 
 #st_write(area_data, file.path(output, "area_data3.geojson")) #last write 16 Feb 2024
-st_write(area_data, file.path(output, "landsat/processed/kelp_area_by_cluster.geojson")) #last write 07 July 2024
+st_write(area_data, file.path(output, "landsat/processed/kelp_area_by_cluster2.geojson"),
+         delete_dsn=TRUE) #last write 17 April 2025
 
 
 

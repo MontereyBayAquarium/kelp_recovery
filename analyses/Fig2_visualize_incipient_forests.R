@@ -6,7 +6,7 @@ rm(list=ls())
 
 ######
 #required packages
-librarian::shelf(tidyverse, sf, raster, shiny, tmap, scales)
+librarian::shelf(tidyverse, sf, raster, shiny, tmap, scales, readxl)
 
 #set directories 
 basedir <- "/Volumes/seaotterdb$/kelp_recovery/data"
@@ -356,7 +356,7 @@ years_to_label <- seq(2014, max(clusters$year), by = 3)
 
 
 ###Plot snails as proxy but normalize
-sofa_urch_norm <- sofa_prox %>% 
+sofa_snail_norm <- sofa_prox %>% 
   ## 1. keep the parameter of interest
   filter(param == "Proportion of diet (biomass consumed) made up of prey type j, group g") %>% 
   
@@ -369,6 +369,28 @@ sofa_urch_norm <- sofa_prox %>%
   mutate(
     rel_0to1 = scales::rescale(relative_effort, to = c(0, 1), na.rm = TRUE),
     rel_center = (relative_effort - mean(relative_effort, na.rm = TRUE))*2 + 0.5
+  ) %>% 
+  ungroup()  %>% 
+  ## 4. drop pandemic years
+  filter(!year %in% c(2020, 2021))
+
+###Plot urchins as proxy but normalize
+sofa_urch_norm <- sofa_urch_prox %>% 
+  ## 1. keep the parameter of interest
+  filter(param == "Proportion of diet (biomass consumed) made up of prey type j, group g") %>% 
+  
+  ## 2. composition within each year  ---- (group by year)
+  group_by(year) %>% 
+  mutate(relative_effort = mean / sum(mean, na.rm = TRUE)) %>% 
+  ungroup() %>% 
+  ## 3. *then* normalise within each habitat  ---- (group by site_type)
+  group_by(site_type) %>% 
+  mutate(
+    rel_0to1 = scales::rescale(relative_effort, to = c(0, 1), na.rm = TRUE),
+    rel_center = (relative_effort - mean(relative_effort, na.rm = TRUE))*2 + 0.5,
+    rel_roll2 = zoo::rollapply(rel_center, 2,
+                          FUN = mean, align="center",
+                          fill=NA, na.rm=TRUE)
   ) %>% 
   ungroup()  %>% 
   ## 4. drop pandemic years
@@ -396,7 +418,7 @@ sofa_urch_prox_raw <- sofa_urch_prox %>%
   mutate(relative_effort = mean / sum(mean, na.rm = TRUE)) %>% 
   ungroup() %>% 
   ## 4. drop pandemic years
-  filter(!year %in% c(2020, 2021))
+  filter(!year %in% c(2020, 2021)) 
 
 
   
@@ -477,7 +499,7 @@ p_type_loess <- p_type +
     data    = sofa_urch_norm,
     aes(x = year, y = rel_center),
     method   = "gam",
-    formula  = y ~ s(x, k = 3),   # only 3 knots
+    formula  = y ~ s(x, k = 4),   # only 3 knots
     se       = TRUE,
     color    = "black",
     size     = 1,
@@ -522,7 +544,7 @@ p_type_loess
 #ggsave(p_type,  filename=file.path(figdir, "Fig5_site_type_timeseries.png"), width = 13.33, height = 7.5, units = "in",
  #     bg = "white", dpi = 600)
 
-ggsave(p_type_loess,  filename=file.path(figdir, "Fig5_sofa_snail_prox_normalized.png"), width = 13.33, height = 7.5, units = "in",
+ggsave(p_type_loess,  filename=file.path(figdir, "Fig5_sofa_urch_prox_normalized.png"), width = 13.33, height = 7.5, units = "in",
        bg = "white", dpi = 600)
 
 
