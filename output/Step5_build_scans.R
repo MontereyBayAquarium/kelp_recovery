@@ -66,7 +66,9 @@ scan_build1 <- scan_dat %>%
   ) %>%
   select(date, lat, long, ind, large, small, behav, canopy, kelptype, seafix,
          prey, prey2, prey3, prey4, visibility, sky, wind, dir, temp = temperatur,
-         seaop, swell)
+         seaop, swell) %>%
+  #add quarter
+  mutate(quarter = lubridate::quarter(date, with_year = TRUE)) 
 
 ################################################################################
 #Export
