@@ -9,7 +9,7 @@ rm(list=ls())
 librarian::shelf(tidyverse, sf, raster, shiny, tmap, scales, readxl)
 
 #set directories 
-basedir <- "/Volumes/seaotterdb$/kelp_recovery/data"
+basedir <- "/Volumes/enhydra/data/kelp_recovery/"
 localdir <- "/Users/jossmith/Documents/Data/landsat"
 figdir <- here::here("figures")
 output <- here::here("output")
@@ -155,24 +155,24 @@ p1 <- ggplot() +
   #  segment.color = "black"
   #) +
   #add scale bar
-  ggsn::scalebar(x.min = -121.99, x.max = -121.88, 
-                 y.min = 36.519, y.max = 36.645,
-                 #anchor=c(x=-124.7,y=41),
-                 location="bottomright",
-                 dist = 2, dist_unit = "km",
-                 transform=TRUE, 
-                 model = "WGS84",
-                 st.dist=0.02,
-                 st.size=2,
-                 border.size=.5,
-                 height=.02
-  )+
+ # ggsn::scalebar(x.min = -121.99, x.max = -121.88, 
+  #               y.min = 36.519, y.max = 36.645,
+   #              #anchor=c(x=-124.7,y=41),
+    #             location="bottomright",
+     #            dist = 2, dist_unit = "km",
+      #           transform=TRUE, 
+       #          model = "WGS84",
+        #         st.dist=0.02,
+         #        st.size=2,
+          #       border.size=.5,
+           #      height=.02
+  #)+
   #add north arrow
-  ggsn::north(x.min = -121.99, x.max = -121.88, 
-              y.min = 36.519, y.max = 36.65,
-              location = "topright", 
-              scale = 0.05, 
-              symbol = 10)+
+ # ggsn::north(x.min = -121.99, x.max = -121.88, 
+  #            y.min = 36.519, y.max = 36.65,
+   #           location = "topright", 
+    #          scale = 0.05, 
+     #         symbol = 10)+
   theme_bw() +  theme(
     plot.tag.position = c(-0.03, 1),
     axis.title = element_blank()) +
@@ -230,20 +230,20 @@ p2 <- ggplot() +
     segment.color = "black"
   ) +
   # Add scalebar and north arrow (as in your original code)
-  ggsn::scalebar(
-    x.min = -121.99, x.max = -121.88,  
-    y.min = 36.519, y.max = 36.645,
-    location = "bottomright",
-    dist = 2, dist_unit = "km",
-    transform = TRUE, model = "WGS84",
-    st.dist = 0.02, st.size = 4,
-    border.size = 0.5, height = 0.02
-  ) +
-  ggsn::north(
-    x.min = -121.99, x.max = -121.88,  
-    y.min = 36.519, y.max = 36.65,
-    location = "topright", scale = 0.05, symbol = 10
-  ) +
+  #ggsn::scalebar(
+  #  x.min = -121.99, x.max = -121.88,  
+  #  y.min = 36.519, y.max = 36.645,
+  #  location = "bottomright",
+  #  dist = 2, dist_unit = "km",
+  #  transform = TRUE, model = "WGS84",
+  #  st.dist = 0.02, st.size = 4,
+  #  border.size = 0.5, height = 0.02
+  #) +
+  #ggsn::north(
+  #  x.min = -121.99, x.max = -121.88,  
+  #  y.min = 36.519, y.max = 36.65,
+  #  location = "topright", scale = 0.05, symbol = 10
+  #) +
   # Apply theme adjustments
   theme_bw() +
   base_theme +
