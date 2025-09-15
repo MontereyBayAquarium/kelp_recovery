@@ -9,8 +9,8 @@ rm(list=ls())
 librarian::shelf(tidyverse, sf, raster, shiny, tmap)
 
 #set directories 
-basedir <- "/Volumes/seaotterdb$/kelp_recovery/data"
-localdir <- "/Users/jossmith/Documents/Data/landsat"
+basedir <- "/Volumes/enhydra/data/kelp_recovery/"
+
 figdir <- here::here("figures")
 output <- here::here("output")
 
@@ -236,7 +236,7 @@ classify_site <- function(values, threshold = 0.05) {
 
 
 
-# Apply the function to your data (for years after 2013) to summarize each site.
+# Apply the function to data (for years after 2013) to summarize each site.
 site_class <- landsat_build3 %>% 
   filter(year > 2013) %>% 
   group_by(site_num) %>% 
@@ -276,24 +276,26 @@ st_write(landsat_classified, file.path(output, "landsat/processed/named_clusters
 
 # transform landsat data to Teale Albers
 
-landsat_build5 <- landsat_build4 %>% st_as_sf(crs = 4326) %>% filter(year == 2023)
+landsat_build5 <- landsat_classified %>% st_as_sf(crs = 4326) %>% filter(year == 2023)
 
 
 #Build barren layer
-rast_build1 <- st_transform(landsat_build5, crs = 3310) %>% filter (incipient == "Barren") 
+rast_build1 <- st_transform(landsat_build5, crs = 3310) %>% filter (site_type == "Barren") 
 r <- rast(rast_build1, res=30)
 landsat_rast_barren <- rasterize(rast_build1, r)
+plot(landsat_rast_barren)
 
 #Build forest layer
-rast_build1 <- st_transform(landsat_build5, crs = 3310) %>% filter (incipient == "Forest") 
+rast_build1 <- st_transform(landsat_build5, crs = 3310) %>% filter (site_type == "Forest") 
 r <- rast(rast_build1, res=30)
 landsat_rast_forest <- rasterize(rast_build1, r)
+plot(landsat_rast_forest)
 
 #Build Incipient
-rast_build1 <- st_transform(landsat_build5, crs = 3310) %>% filter (incipient == "Incipient") 
+rast_build1 <- st_transform(landsat_build5, crs = 3310) %>% filter (site_type == "Incipient") 
 r <- rast(rast_build1, res=30)
 landsat_rast_incipient <- rasterize(rast_build1, r)
-
+plot(landsat_rast_incipient)
 
 #prep KML files
 rast_my_spat <- raster(landsat_rast_barren)
