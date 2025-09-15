@@ -1,6 +1,6 @@
 
 
-#Joshua G. Smith; jossmith@mbayaq.org
+#Joshua G. Smith; jogsmith@ucsc.edu
 
 rm(list=ls())
 
@@ -27,14 +27,13 @@ rm(list=ls())
 librarian::shelf(tidyverse, sf, raster, shiny, tmap, terra, tidyterra, RColorBrewer)
 
 #set directories 
-basedir <- "/Volumes/seaotterdb$/kelp_recovery/data"
-localdir <- "/Users/jossmith/Documents/Data/landsat"
+basedir <- "/Volumes/enhydra/data/kelp_recovery/"
 
 #read state
 ca_counties_orig <- st_read(file.path(basedir, "gis_data/raw/ca_county_boundaries/s7vc7n.shp")) 
 
 #read landsat raw
-landsat_orig <- st_read(file.path(localdir, "/processed/monterey_peninsula/landsat_mpen_1984_2023_points_withNAs.shp"))
+landsat_orig <- st_read(file.path(basedir, "kelp_landsat/processed/monterey_peninsula/landsat_mpen_1984_2023_points_withNAs.shp"))
 
 # Get land
 usa <- rnaturalearth::ne_states(country="United States of America", returnclass = "sf")
