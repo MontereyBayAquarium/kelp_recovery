@@ -185,6 +185,8 @@ pred_2025_by_szst_constrained <- pred_2024_by_szst %>%
 transitions_tbl_constrained <- pred_2025_by_szst_constrained
 transitions_tbl_constrained
 
+save(transitions_tbl_constrained, file = here::here("output","lda_patch_transitions.rda"))
+
 ################################################################################
 # Step 6: Explore accuracy summaries
 
