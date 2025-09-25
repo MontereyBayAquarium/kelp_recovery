@@ -26,15 +26,7 @@ dissection_orig <- read_csv(file.path(datadir, "MBA_kelp_forest_database/process
 
 #GIS layers
 bathy_5m_raw <- st_read(file.path(datadir, "gis_data/raw/bathymetry/contours_5m/contours_5m.shp"))
-
-
-# Download to local working directory (change path if you prefer)
-drive_download(file, path = "bat_nccsr_2m_bathy.tif", overwrite = TRUE)
-
-# Load into R
-bathy_raster <- rast("bat_nccsr_2m_bathy.tif")
-plot(bathy_raster)
-
+bathy_2m_raw <- rast("/Users/jossmith/Downloads/bat_ccsr_n_2m_bathy.tif")
 
 #laod scans
 scan_orig <- read_csv(file.path(here::here("output","scans","scans_data.csv")))
@@ -185,6 +177,9 @@ View(quad_build1)
 ################################################################################
 #Step 4: process bathy
 
+#--------------------------------------------------
+# 2. Define Monterey Peninsula bounding box (WGS84)
+#--------------------------------------------------
 monterey_bbox <- st_as_sfc(st_bbox(c(
   xmin = -122.0,
   xmax = -121.85,
@@ -192,12 +187,60 @@ monterey_bbox <- st_as_sfc(st_bbox(c(
   ymax = 36.65
 ), crs = 4326))
 
-monterey_bbox_proj <- st_transform(monterey_bbox, st_crs(bathy_raw))
+# Reproject bbox to raster CRS
+monterey_bbox_proj <- st_transform(monterey_bbox, st_crs(bathy_2m_raw))
 
-bathy_mpen <- bathy_raw %>%
-  filter(CONTOUR %in% c(-5, -10, -15, -20)) %>%
-  st_intersection(monterey_bbox_proj)
+# Convert sf polygon to terra vector
+monterey_bbox_spat <- vect(monterey_bbox_proj)
 
-plot(bathy_mpen)
-rm(bath_raw)
+#--------------------------------------------------
+# 3. Crop and mask raster
+#--------------------------------------------------
+bathy_mpen_raster <- crop(bathy_2m_raw, monterey_bbox_spat)
+bathy_mpen_raster <- mask(bathy_mpen_raster, monterey_bbox_spat)
 
+#--------------------------------------------------
+# 4. Define 2-m breakpoints and build reclass matrix
+#--------------------------------------------------
+levels <- seq(-20, 0, by = 2)
+
+# Class values = 1, 2, 3, … instead of depths
+rcl <- cbind(head(levels, -1), tail(levels, -1), seq_along(head(levels, -1)))
+
+# Add NA bins for outside range
+min_val <- min(values(bathy_mpen_raster), na.rm = TRUE)
+max_val <- max(values(bathy_mpen_raster), na.rm = TRUE)
+
+rcl <- rbind(c(min_val, -20, NA), rcl, c(0, max_val, NA))
+
+#--------------------------------------------------
+# 5. Reclassify raster into 2-m bands
+#--------------------------------------------------
+bathy_class <- classify(bathy_mpen_raster, rcl, include.lowest = TRUE)
+
+# Convert raster to polygons
+bathy_polys <- as.polygons(bathy_class, dissolve = TRUE, values = TRUE)
+bathy_polys_sf <- st_as_sf(bathy_polys)
+
+#--------------------------------------------------
+# 6. Add human-readable depth labels
+#--------------------------------------------------
+depth_labels <- paste(head(levels, -1), "to", tail(levels, -1))
+bathy_polys_sf$depth_band <- factor(
+  depth_labels[bathy_polys_sf$bat_ccsr_n_2m_bathy],
+  levels = depth_labels
+)
+
+#--------------------------------------------------
+# 7. Plot polygons
+#--------------------------------------------------
+ggplot() +
+  geom_sf(data = bathy_polys_sf, aes(fill = depth_band), color = NA) +
+  geom_sf(data = monterey_bbox_proj, fill = NA, color = "red", linetype = "dashed") +
+  #scale_fill_viridis_d(option = "plasma", name = "Depth (m)") +
+  theme_minimal() +
+  labs(
+    title = "Bathymetry of Monterey Peninsula",
+    subtitle = "2-m depth bands (-20 m to 0 m)",
+    x = "Longitude", y = "Latitude"
+  )
