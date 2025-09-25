@@ -15,17 +15,17 @@ rm(list = ls())
 require(librarian)
 librarian::shelf(tidyverse, lubridate, sf, stringr, purrr)
 
-datadir <- "/Volumes/enhydra/data/kelp_recovery/MBA_kelp_forest_database/"
+datadir <- "/Volumes/enhydra/data/kelp_recovery/"
 localdir <- here::here("output")
 
 #load benthic survey data
-load(file.path(datadir, "processed/recovery/kelp_recovery_data.rda"))
+load(file.path(datadir, "MBA_kelp_forest_database/processed/recovery/kelp_recovery_data.rda"))
 
 #load dissection data
-dissection_orig <- read_csv(file.path(datadir, "processed/dissection/dissection_data_recovery.csv"))
+dissection_orig <- read_csv(file.path(datadir, "MBA_kelp_forest_database/processed/dissection/dissection_data_recovery.csv"))
 
 #GIS layers
-load(file.path(datadir, "processed/recovery/kelp_recovery_data.rda"))
+bathy_10m <- st_read(file.path(datadir, "gis_data/raw/bathymetry/contours_5m/contours_5m.shp")) %>% filter(CONTOUR == "-10")
 
 #laod scans
 scan_orig <- read_csv(file.path(here::here("output","scans","scans_data.csv")))
