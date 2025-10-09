@@ -114,12 +114,17 @@ ggplot(site_patches_with_points %>% filter(year(survey_date) == 2024)) +
 str(site_patches_with_points)
 
 
-
+#tidy up and add classifier
 quad_build3 <- site_patches_with_points %>%
-                mutate(patch_cat = ifelse(year(survey_date) == 2024,"predicted 2024","predicted 2025"))
+                mutate(patch_cat = ifelse(year(survey_date) == 2024,"predicted 2024","predicted 2025")) %>%
+                dplyr::select(-site_type.x) %>%
+                dplyr::select(patch_id, survey_type, region, latitude, longitude, 
+                       survey_date,site, site_type = site_type.y, pred_patch, 
+                       everything())
 
 ggplot(quad_build3) +
   geom_sf(aes(fill = pred_patch), color = "black") +
+  geom_sf(data = st_centroid(quad_build3), color = "black", size = 1) +   # overlay points
   facet_wrap(~patch_cat, nrow=1)+
   theme_minimal() +
   labs(
