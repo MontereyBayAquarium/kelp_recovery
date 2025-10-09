@@ -44,6 +44,14 @@ quad_zone <- quad_data %>%
               summarise(across(where(is.numeric), ~ mean(.x, na.rm = TRUE)),
                         .groups = "drop")
 
+#intermediate step: prepare site metadata table
+
+site_table <- quad_zone %>% 
+                group_by(site, site_type, zone) %>%
+                distinct(latitude, longitude)
+
+write_csv(site_table, here::here("output","site_meta_data","site_table.csv"))
+
 ################################################################################
 # Step 2: Read and prepare individual polygon patches (KMZ to KML to separate polygons)
 kmz_files <- list.files(poly_dir, pattern = "\\.kmz$", full.names = TRUE, ignore.case = TRUE)
@@ -245,13 +253,17 @@ ggplot() +
     x = "Longitude", y = "Latitude"
   )
 
+#export this as a shapefile for use in QGIS
+st_write(
+  bathy_polys_sf,
+  here::here("output","gis_data","processed","mpen_2m_bathy.shp"),     #
+  driver = "ESRI Shapefile",
+  delete_dsn = TRUE         # overwrite if it already exists
+)
+
+
 ################################################################################
 #Step 4: split polygons by depth band
-
-
-
-
-
 
 # --- libraries ---
 library(sf)
@@ -505,7 +517,7 @@ zone_points <- quad_valid |>
   st_centroid()
 
 # --- 3) Simplify & COMBINE coastline once (important) ---
-coast_tol  <- 150   # meters; adjust if needed (100–300)
+coast_tol  <- 100   # meters; adjust if needed (100–300)
 coast_simpl <- st_simplify(coastline, dTolerance = coast_tol)
 coast_ml     <- st_cast(st_combine(coast_simpl), "MULTILINESTRING")
 coast_ml_sf  <- st_sf(geometry = coast_ml)  # handy sf wrapper
@@ -688,6 +700,316 @@ if (!is.null(patches_split)) {
     labs(title = "Area-preserving onshore/offshore patch split",
          subtitle = sprintf("Nearshore = patch ∩ buffer(coast, m̄). coast_tol=%dm; scales=%s",
                             coast_tol, paste0(c(1.00,1.15,0.90,1.30,0.75), collapse=", ")),
+         fill = "Zone", color = "Zone")
+} else {
+  message("⚠️ No split patches were created")
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# ======================================================
+# Split each patch by coastline-parallel midpoint offset
+# (shallow/deep defined by distance to coastline)
+# ======================================================
+
+# --- libraries ---
+library(sf)
+library(dplyr)
+library(ggplot2)
+library(lwgeom)        # st_split backend
+sf_use_s2(FALSE)       # planar ops for stability
+
+# --- PARAMETERS ---
+target_crs  <- 3310    # California Albers (meters)
+coast_path  <- "/Volumes/enhydra/data/kelp_recovery/gis_data/raw/Coastn83/coastn83.shp"
+coast_tol   <- 150     # coastline simplification tolerance (m); try 100–300
+m_nudge     <- 1.00    # 0.98 or 1.02 to bias split slightly shoreward/offshore
+sliver_frac <- 0.01    # drop pieces < 1% of original patch area
+tiny_abs_m2 <- 5       # also drop absolute tinies (< 5 m^2)
+
+# Monterey viewport for plotting (in WGS84; will transform below)
+monterey_wgs  <- st_as_sfc(st_bbox(c(xmin = -122.00, xmax = -121.88,
+                                     ymin = 36.52,  ymax = 36.65), crs = 4326))
+
+# --- INPUTS IN MEMORY REQUIRED ---
+# quad_build1: sf POINTS with at least: site, site_type, zone (Shallow/Deep)
+# polys_individual: sf (MULTI)POLYGON with: patch_id, patch_type
+
+stopifnot(inherits(quad_build1, "sf"), inherits(polys_individual, "sf"))
+
+# --- LOAD & PREPARE COASTLINE ---
+coastline <- st_read(coast_path, quiet = TRUE) |>
+  st_transform(target_crs)
+
+# --- REPROJECT OTHER LAYERS & MAKE VALID ---
+quad_build1      <- st_transform(quad_build1,      target_crs)
+polys_individual <- st_transform(polys_individual, target_crs) |> st_make_valid()
+
+# --- JOIN QUADS → PATCH (keep only those on a patch) ---
+quad_with_patch <- st_join(
+  quad_build1,
+  polys_individual |> dplyr::select(patch_id, patch_type),
+  join = st_intersects
+)
+quad_valid <- quad_with_patch |> filter(!is.na(patch_id))
+
+# One representative point per (site, site_type, patch_id, zone)
+zone_points <- quad_valid |>
+  group_by(site, site_type, patch_id, zone) |>
+  summarise(geometry = st_union(geometry), .groups = "drop") |>
+  st_centroid()
+
+# --- SIMPLIFY & COMBINE COASTLINE (single MULTILINESTRING) ---
+coast_simpl <- st_simplify(coastline, dTolerance = coast_tol)
+coast_ml    <- st_cast(st_combine(coast_simpl), "MULTILINESTRING") |> st_make_valid()
+
+# --- DIAGNOSTIC PLOT (before splitting) ---
+monterey_3310 <- st_transform(monterey_wgs, target_crs)
+mbb <- st_bbox(monterey_3310)
+
+ggplot() +
+  geom_sf(data = polys_individual, fill = "grey85", color = "black", alpha = 0.3) +
+  geom_sf(data = st_as_sf(coast_simpl), color = "red", linewidth = 0.25) +
+  geom_sf(data = zone_points, aes(color = zone), size = 1.2) +
+  scale_color_manual(values = c(Shallow = "#1f78b4", Deep = "#33a02c")) +
+  coord_sf(xlim = c(mbb["xmin"], mbb["xmax"]), ylim = c(mbb["ymin"], mbb["ymax"])) +
+  theme_minimal() +
+  labs(title = sprintf("Diagnostic: Simplified Coastline (tol = %dm)", coast_tol),
+       subtitle = "Grey = patches; Red = simplified coast; points = Shallow/Deep",
+       color = "Zone")
+
+# --- HELPERS ---
+has_nonempty <- function(x) {
+  if (is.null(x)) return(FALSE)
+  if (inherits(x, "sf"))  return(nrow(x) > 0 && any(!st_is_empty(x)))
+  if (inherits(x, "sfc")) return(length(x) > 0 && any(!st_is_empty(x)))
+  FALSE
+}
+
+dissolve_clean <- function(x) {
+  if (!has_nonempty(x)) return(NULL)
+  g <- st_make_valid(st_union(x))
+  g <- st_buffer(g, 0)
+  g <- st_collection_extract(g, "POLYGON")
+  out <- st_as_sf(g)
+  if (!has_nonempty(out)) return(NULL)
+  out
+}
+
+# --- constants used as defaults (avoid same-name defaults) ---
+COAST_TOL_DEFAULT   <- coast_tol    # you already set coast_tol earlier
+M_NUDGE_DEFAULT     <- 1.00         # try 0.98..1.02 to bias shore/offshore
+SLIVER_FRAC_DEFAULT <- 0.01
+TINY_ABS_M2_DEFAULT <- 5
+
+# --- REPLACE your split_patch_by_offset() with this version ---
+split_patch_by_offset <- function(
+    g_one,
+    coast_ml,
+    coast_tol_used  = COAST_TOL_DEFAULT,
+    m_nudge_val     = M_NUDGE_DEFAULT,
+    sliver_frac_val = SLIVER_FRAC_DEFAULT,
+    tiny_abs_m2_val = TINY_ABS_M2_DEFAULT
+) {
+  # must have both zones present
+  if (!all(c("Shallow","Deep") %in% g_one$zone)) return(NULL)
+  
+  pid   <- unique(g_one$patch_id)
+  site  <- unique(g_one$site)
+  stype <- unique(g_one$site_type)
+  
+  patch_poly <- polys_individual |>
+    dplyr::filter(patch_id == pid) |>
+    st_make_valid()
+  if (nrow(patch_poly) == 0 || st_is_empty(patch_poly)) return(NULL)
+  
+  # representative points (only for distance calc)
+  shallow_pt <- g_one |> dplyr::filter(zone=="Shallow") |> st_geometry() |> st_union() |> st_centroid()
+  deep_pt    <- g_one |> dplyr::filter(zone=="Deep")    |> st_geometry() |> st_union() |> st_centroid()
+  
+  # midpoint distance to coastline
+  ds <- as.numeric(min(st_distance(shallow_pt, coast_ml)))
+  dd <- as.numeric(min(st_distance(deep_pt,    coast_ml)))
+  if (!is.finite(ds) || !is.finite(dd)) return(NULL)
+  m  <- ((ds + dd) / 2) * m_nudge_val
+  if (!is.finite(m) || m <= 0) return(NULL)
+  
+  # big enough window so isoline is long enough
+  win <- st_buffer(st_geometry(patch_poly), dist = (2*m + 1500))
+  local_coast <- tryCatch(st_intersection(coast_ml, win), error = function(e) coast_ml)
+  if (is.null(local_coast) || length(local_coast) == 0) local_coast <- coast_ml
+  
+  # isodistance isoline at distance m
+  iso_poly <- st_buffer(local_coast, dist = m)
+  iso_line <- st_boundary(iso_poly) |> st_collection_extract("LINESTRING")
+  if (length(iso_line) == 0) return(NULL)
+  
+  # clip isoline near patch & pick longest segment
+  iso_local <- tryCatch(st_intersection(st_as_sf(iso_line), st_buffer(st_geometry(patch_poly), m + 200)),
+                        error = function(e) st_as_sf(iso_line))
+  if (nrow(iso_local) == 0) return(NULL)
+  cut_line <- iso_local[which.max(st_length(iso_local)), , drop = FALSE]
+  
+  # ensure it intersects the patch; one retry with bigger clip
+  if (!any(st_intersects(st_geometry(cut_line), st_geometry(patch_poly), sparse = FALSE))) {
+    iso_local2 <- tryCatch(st_intersection(st_as_sf(iso_line), st_buffer(st_geometry(patch_poly), 3*m + 200)),
+                           error = function(e) NULL)
+    if (!is.null(iso_local2) && nrow(iso_local2) > 0)
+      cut_line <- iso_local2[which.max(st_length(iso_local2)), , drop = FALSE]
+  }
+  if (!any(st_intersects(st_geometry(cut_line), st_geometry(patch_poly), sparse = FALSE))) return(NULL)
+  
+  # split
+  pieces <- tryCatch({
+    st_collection_extract(st_split(st_make_valid(patch_poly), st_geometry(cut_line)), "POLYGON")
+  }, error = function(e) NULL)
+  if (is.null(pieces) || nrow(pieces) == 0) return(NULL)
+  
+  # drop slivers
+  A_all <- as.numeric(st_area(st_union(patch_poly)))
+  pieces$area_m2 <- as.numeric(st_area(pieces))
+  pieces <- pieces |> dplyr::filter(area_m2 > max(A_all * sliver_frac_val, tiny_abs_m2_val))
+  if (nrow(pieces) == 0) return(NULL)
+  
+  # label by coast distance vs m (more robust than point-centroid proximity)
+  pc <- st_centroid(pieces)
+  d_piece <- as.numeric(st_distance(pc, coast_ml))
+  pieces$zone <- ifelse(d_piece <= m, "Shallow", "Deep")
+  
+  # dissolve by zone
+  dissolve_clean <- function(x) {
+    if (is.null(x) || nrow(x) == 0) return(NULL)
+    g <- st_make_valid(st_union(x))
+    g <- st_buffer(g, 0)
+    g <- st_collection_extract(g, "POLYGON")
+    out <- st_as_sf(g)
+    if (is.null(out) || nrow(out) == 0) return(NULL)
+    out
+  }
+  shallow_sf <- pieces |> dplyr::filter(zone=="Shallow") |> dissolve_clean()
+  deep_sf    <- pieces |> dplyr::filter(zone=="Deep")    |> dissolve_clean()
+  
+  # if one missing, nudge m a bit
+  if (is.null(shallow_sf) || is.null(deep_sf)) {
+    for (f in c(0.95, 1.05, 0.90, 1.10)) {
+      m_try <- m * f
+      pieces$zone <- ifelse(d_piece <= m_try, "Shallow", "Deep")
+      shallow_sf <- pieces |> dplyr::filter(zone=="Shallow") |> dissolve_clean()
+      deep_sf    <- pieces |> dplyr::filter(zone=="Deep")    |> dissolve_clean()
+      if (!is.null(shallow_sf) && !is.null(deep_sf)) break
+    }
+  }
+  if (is.null(shallow_sf) || is.null(deep_sf)) return(NULL)
+  
+  # fill any gap: patch - (shallow ∪ deep)
+  union_sd <- st_union(shallow_sf, deep_sf)
+  gap <- suppressWarnings(st_difference(st_geometry(patch_poly), union_sd))
+  if (!is.null(gap) && length(gap) > 0 && any(!st_is_empty(gap))) {
+    gap_sf <- st_as_sf(st_collection_extract(gap, "POLYGON", warn = FALSE))
+    if (!is.null(gap_sf) && nrow(gap_sf) > 0) {
+      gc <- st_centroid(gap_sf)
+      dg <- as.numeric(st_distance(gc, coast_ml))
+      gap_sf$zone <- ifelse(dg <= m, "Shallow", "Deep")
+      shallow_sf <- dissolve_clean(rbind(shallow_sf, gap_sf |> dplyr::filter(zone=="Shallow")))
+      deep_sf    <- dissolve_clean(rbind(deep_sf,    gap_sf |> dplyr::filter(zone=="Deep")))
+    }
+  }
+  
+  # remove overlaps (assign overlap to nearer side)
+  ov <- suppressWarnings(st_intersection(st_geometry(shallow_sf), st_geometry(deep_sf)))
+  if (!is.null(ov) && length(ov) > 0 && any(!st_is_empty(ov))) {
+    oc  <- st_centroid(st_as_sf(ov))
+    d_o <- as.numeric(st_distance(oc, coast_ml))
+    if (mean(d_o, na.rm = TRUE) <= m) {
+      deep_sf <- suppressWarnings(st_difference(deep_sf, ov)) |> dissolve_clean()
+    } else {
+      shallow_sf <- suppressWarnings(st_difference(shallow_sf, ov)) |> dissolve_clean()
+    }
+  }
+  
+  shallow_sf$zone <- "Shallow"
+  deep_sf$zone    <- "Deep"
+  out <- dplyr::bind_rows(shallow_sf, deep_sf)
+  if (is.null(out) || nrow(out) == 0) return(NULL)
+  
+  out$site       <- site
+  out$site_type  <- stype
+  out$patch_id   <- pid
+  out$patch_type <- unique(patch_poly$patch_type)
+  out$mid_dist_m <- m
+  out$coast_tol  <- coast_tol_used
+  
+  out |> dplyr::select(patch_id, patch_type, site, site_type, zone, mid_dist_m, coast_tol, geometry)
+}
+
+
+# --- IMPORTANT: pass arguments explicitly in lapply (no defaults evaluated) ---
+split_list <- lapply(
+  groups,
+  function(g) split_patch_by_offset(
+    g_one          = g,
+    coast_ml       = coast_ml,
+    coast_tol_used = COAST_TOL_DEFAULT,
+    m_nudge_val    = M_NUDGE_DEFAULT,
+    sliver_frac_val= SLIVER_FRAC_DEFAULT,
+    tiny_abs_m2_val= TINY_ABS_M2_DEFAULT
+  )
+)
+split_list   <- split_list[!sapply(split_list, is.null)]
+patches_split<- if (length(split_list)) dplyr::bind_rows(split_list) else NULL
+
+
+# --- APPLY PER (site, site_type, patch_id) ---
+groups <- split(zone_points, interaction(zone_points$site,
+                                         zone_points$site_type,
+                                         zone_points$patch_id,
+                                         drop = TRUE))
+
+split_list <- lapply(groups, function(g) split_patch_by_offset(g, coast_ml = coast_ml))
+split_list <- split_list[!sapply(split_list, is.null)]
+patches_split <- if (length(split_list)) dplyr::bind_rows(split_list) else NULL
+
+message("✅ Groups attempted: ", length(groups),
+        " | successful splits: ", ifelse(is.null(patches_split), 0, nrow(patches_split)))
+
+# --- PLOT (Monterey) ---
+if (!is.null(patches_split)) {
+  ggplot() +
+    geom_sf(data = polys_individual, aes(fill = patch_type),
+            color = "grey80", alpha = 0.25, show.legend = FALSE) +
+    geom_sf(data = patches_split, aes(fill = zone),
+            color = "black", alpha = 0.6) +
+    geom_sf(data = zone_points, aes(color = zone), size = 1.2) +
+    geom_sf(data = st_as_sf(coast_simpl), color = "red", linewidth = 0.25) +
+    scale_fill_manual(values = c(Shallow = "#1f78b4", Deep = "#33a02c")) +
+    scale_color_manual(values = c(Shallow = "#1f78b4", Deep = "#33a02c")) +
+    coord_sf(xlim = c(mbb["xmin"], mbb["xmax"]), ylim = c(mbb["ymin"], mbb["ymax"])) +
+    theme_minimal() +
+    labs(title = "Patch splits by coastline-parallel midpoint offset",
+         subtitle = sprintf("Coastline simplified (tol = %dm). Coverage repaired; slivers dropped.", coast_tol),
          fill = "Zone", color = "Zone")
 } else {
   message("⚠️ No split patches were created")
