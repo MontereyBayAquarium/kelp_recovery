@@ -318,11 +318,11 @@ st_write(non_overlap_smoothed_wgs, file.path(here::here("output","landsat",
                                                         "processed",
                                                         "smoothed_patch_polygons.shp")), delete_layer = TRUE)
 
-#Files required for QGIS:
+#Files required for QGIS (currently live in output folder):
   #- high res coast polyline - coastn83.shp
   #- Polygons for patches (created in this script) - smoothed_patch_polygons.shp
-  #- Isobaths
-  #- site locations - 
+  #- Isobaths - mpen_2m_bathy.shp
+  #- site locations - site_table.csv
 
 #steps conducted in QGIS:
   #- Import patch polygons and extend patches to the shoreline
