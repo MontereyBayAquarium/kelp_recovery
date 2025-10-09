@@ -120,7 +120,8 @@ quad_build3 <- site_patches_with_points %>%
                 dplyr::select(-site_type.x) %>%
                 dplyr::select(patch_id, survey_type, region, latitude, longitude, 
                        survey_date,site, site_type = site_type.y, pred_patch, 
-                       everything())
+                       everything()) %>%
+                mutate(pred_patch = ifelse(is.na(pred_patch),site_type,pred_patch))
 
 ggplot(quad_build3) +
   geom_sf(aes(fill = pred_patch), color = "black") +
@@ -132,4 +133,8 @@ ggplot(quad_build3) +
     fill = "Predicted Patch"
   )
 
+################################################################################
+#Step 5: join sea otter scan data
+
+View(scan_orig)
 
