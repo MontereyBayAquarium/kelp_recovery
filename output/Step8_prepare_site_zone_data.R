@@ -65,8 +65,8 @@ str(transitions_tbl_constrained)
 quad_zone_with_pred <- quad_zone %>%
   left_join(
     transitions_tbl_constrained %>%
-      dplyr::select(site, zone, patch_2024, patch_2025),
-    by = c("site", "zone")
+      dplyr::select(site, site_type, zone, patch_2024, patch_2025),
+    by = c("site","site_type", "zone")
   ) %>%
   mutate(
     pred_patch = case_when(
@@ -98,11 +98,33 @@ plot(site_patches_single)
 
 #join points to polygons
 site_patches_with_points <- site_patches_single %>%
-  st_join(quad_zone_sf, join = st_intersects, left = TRUE)
+  st_join(quad_zone_sf, join = st_intersects, left = TRUE) %>%
+  filter(!(is.na(survey_type)))
+
+
+#inspect
+ggplot(site_patches_with_points %>% filter(year(survey_date) == 2024)) +
+  geom_sf(aes(fill = pred_patch), color = "black") +
+  theme_minimal() +
+  labs(
+    title = "Predicted Patch Type by Independent Polygon (2024)",
+    fill = "Predicted Patch"
+  )
+
+str(site_patches_with_points)
 
 
 
+quad_build3 <- site_patches_with_points %>%
+                mutate(patch_cat = ifelse(year(survey_date) == 2024,"predicted 2024","predicted 2025"))
 
-
+ggplot(quad_build3) +
+  geom_sf(aes(fill = pred_patch), color = "black") +
+  facet_wrap(~patch_cat, nrow=1)+
+  theme_minimal() +
+  labs(
+    title = "Predicted Patch Type by Independent Polygon (2024)",
+    fill = "Predicted Patch"
+  )
 
 
