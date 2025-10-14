@@ -13,7 +13,7 @@ rm(list = ls())
 ################################################################################
 #Step 0: set paths and load data
 require(librarian)
-librarian::shelf(tidyverse, lubridate, sf, stringr, purrr, terra)
+librarian::shelf(tidyverse, lubridate, sf, stringr, purrr, terra, janitor)
 
 datadir <- "/Volumes/enhydra/data/kelp_recovery/"
 localdir <- here::here("output")
@@ -132,9 +132,4 @@ ggplot(quad_build3) +
     title = "Predicted Patch Type by Independent Polygon (2024)",
     fill = "Predicted Patch"
   )
-
-################################################################################
-#Step 5: join sea otter scan data
-
-View(scan_orig)
 
