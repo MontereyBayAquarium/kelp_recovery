@@ -13,7 +13,8 @@ rm(list = ls())
 ################################################################################
 #Step 0: set paths and load data
 require(librarian)
-librarian::shelf(tidyverse, lubridate, sf, stringr, purrr, terra, janitor)
+librarian::shelf(tidyverse, lubridate, sf, stringr, purrr, terra, janitor,
+                 rnaturalearth, rnaturalearthdata)
 
 datadir <- "/Volumes/enhydra/data/kelp_recovery/"
 localdir <- here::here("output")
@@ -36,6 +37,9 @@ site_patches <- st_read(here::here("output","gis_data","processed","site_patch_p
 
 #load LDA-predicted patch types
 lda_patch <- load(here::here("output","lda_patch_transitionsv2.rda"))
+
+# read CA state
+ca_state <- st_read("/Volumes/enhydra/data/kelp_recovery/gis_data/raw/CA_state/ca_boundary_wgs84.shp", quiet=TRUE) |> st_transform(4326)
 
 
 ################################################################################
@@ -153,4 +157,86 @@ ggplot(quad_build3) +
 
 
 #save(quad_build3, file = here::here("output","survey_data","processed","zone_level_data3.rda"))
+
+################################################################################
+#Build Figure1
+
+my_theme <- theme(axis.text=element_text(size=6),
+                  axis.text.y = element_text(angle = 90, hjust = 0.5),
+                  axis.title=element_text(size=8),
+                  plot.tag=element_text(size=8, face="bold"),
+                  plot.title=element_text(size=7, face="bold"),
+                  panel.grid.major = element_blank(), 
+                  panel.grid.minor = element_blank(),
+                  axis.line = element_line(colour = "black"),
+                  legend.key = element_blank(),
+                  legend.background = element_rect(fill=alpha('blue', 0)),
+                  legend.key.height = unit(1, "lines"), 
+                  legend.text = element_text(size = 6),
+                  legend.title = element_text(size = 7),
+                  strip.background = element_blank(),
+                  strip.text = element_text(size = 6 ,face="bold"),
+                  panel.background = element_rect(fill="white"))
+
+
+# Inset map (California with MB bounding box)
+usa     <- ne_states(country="United States of America", returnclass="sf")
+foreign <- ne_countries(country=c("Canada","Mexico"), returnclass="sf")
+#read state
+ca_counties <- st_read(file.path(datadir, "gis_data/raw/ca_county_boundaries/s7vc7n.shp")) 
+
+
+# Build inset
+g1_inset <-  ggplotGrob(
+  ggplot() +
+    # Plot land
+    geom_sf(data=foreign, fill="grey80", color="white", lwd=0.3) +
+    geom_sf(data=usa, fill="grey80", color="white", lwd=0.3) +
+    # Plot box
+    annotate("rect", xmin=-122.6, xmax=-121, ymin=36.2, ymax=37.1, color="black", fill=NA, lwd=0.8) +
+    # Label regions
+    #geom_text(data=region_labels, mapping=aes(y=lat_dd, label=region), x= -124.4, hjust=0, size=2) +
+    # Labels
+    labs(x="", y="") +
+    # Crop
+    coord_sf(xlim = c(-124.5, -117), ylim = c(32.5, 42)) +
+    # Theme
+    theme_bw() + my_theme +
+    theme( plot.margin = unit(rep(0, 4), "null"),
+           panel.margin = unit(rep(0, 4), "null"),
+           panel.background = element_rect(fill='transparent'), #transparent panel bg
+           # plot.background = element_rect(fill='transparent', color=NA), #transparent plot bg
+           axis.ticks = element_blank(),
+           axis.ticks.length = unit(0, "null"),
+           axis.ticks.margin = unit(0, "null"),
+           axis.text = element_blank(),
+           axis.title=element_blank(),
+           axis.text.y = element_blank())
+)
+
+
+
+
+ggplot(quad_build3) +
+  #Plot land
+  geom_sf(data = ca_counties) +
+  #plot patches
+  geom_sf(aes(fill = pred_patch), color = "black") +
+  geom_sf(data = st_centroid(quad_build3), color = "black", size = 1) +   # overlay points
+  facet_wrap(~patch_cat, nrow=1)+
+  coord_sf(xlim = c(-121.99, -121.88), ylim = c(36.53, 36.64)) +
+  theme_bw() + 
+  # Add plot inset
+  annotation_custom(grob = g1_inset, 
+                    xmin = -122, 
+                    xmax = -121.97,
+                    ymin = 36.62) +
+  labs(
+    title = "",
+    fill = "Patch type"
+  ) + my_theme
+
+
+
+
 

@@ -305,7 +305,7 @@ pdp_list <- lapply(top_incip_feats, function(v) {
    geom_col(fill = "grey40") +
    coord_flip() +
    theme_bw() + my_theme +
-   labs(x = NULL, y = "Features predicting \n patch types")
+   labs(x = NULL, y = "Features separating \n patch types")
  
  # ------------------------------------------------------------
  # PANEL C: Feature contrasts
@@ -391,10 +391,10 @@ pdp_list <- lapply(top_incip_feats, function(v) {
  # ------------------------------------------------------------
  final_fig
  
- ggsave(
-   here::here("figures", "Fig2_incipient_feature_figure.png"),
-   final_fig,
-   width = 10, height = 9, dpi = 600
- )
+ #ggsave(
+#   here::here("figures", "Fig2_incipient_feature_figure.png"),
+#   final_fig,
+#   width = 10, height = 9, dpi = 600
+# )
  
  
