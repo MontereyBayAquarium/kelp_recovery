@@ -159,6 +159,19 @@ ggplot(quad_build3) +
 #save(quad_build3, file = here::here("output","survey_data","processed","zone_level_data3.rda"))
 
 ################################################################################
+#Step 6: prepare scan data for plot
+
+# Convert to sf using lat/lon
+scan_sf <- st_as_sf(
+  scan_orig,
+  coords = c("long", "lat"),
+  crs = 4326,
+  remove = FALSE
+) %>% filter(year == 2024 | year == 2025)
+
+
+
+################################################################################
 #Build Figure1
 
 my_theme <- theme(axis.text=element_text(size=6),
@@ -217,25 +230,133 @@ g1_inset <-  ggplotGrob(
 
 
 
-ggplot(quad_build3) +
-  #Plot land
-  geom_sf(data = ca_counties) +
-  #plot patches
+
+
+g1 <-ggplot(quad_build3 %>% filter(year(survey_date) == 2024)) +
+  # plot patches
   geom_sf(aes(fill = pred_patch), color = "black") +
-  geom_sf(data = st_centroid(quad_build3), color = "black", size = 1) +   # overlay points
-  facet_wrap(~patch_cat, nrow=1)+
+  # add foraging locations (sea otter observations)
+  geom_sf(
+    data = scan_sf %>% filter(year == 2024),
+    aes(shape = "Sea otter \nobservation"),
+    color = "black",
+    size = 0.8,
+    alpha = 0.2
+  ) +
+  # add survey sites (subtidal sites)
+  geom_sf(
+    data = st_centroid(quad_build3 %>% filter(year(survey_date) == 2024)),
+    aes(shape = "Subtidal survey \nsite"),
+    fill = "yellow",
+    #alpha=0.7,
+    color = "black",
+    size = 1.5
+  ) +
+  # plot land
+  geom_sf(data = ca_counties, color = "grey70", fill = "grey85") +
   coord_sf(xlim = c(-121.99, -121.88), ylim = c(36.53, 36.64)) +
-  theme_bw() + 
+  theme_bw() +
   # Add plot inset
-  annotation_custom(grob = g1_inset, 
-                    xmin = -122, 
-                    xmax = -121.97,
-                    ymin = 36.62) +
+  annotation_custom(
+    grob = g1_inset,
+    xmin = -122.001,
+    xmax = -121.97,
+    ymin = 36.62
+  ) +
   labs(
     title = "",
-    fill = "Patch type"
-  ) + my_theme
+    fill = "Patch type",
+    shape = ""  # legend title for shapes
+  ) +
+  scale_fill_manual(
+    values = c(
+      "BAR"   = "#7570B3",
+      "FOR"   = "#1B9E77",
+      "INCIP" = "#D95F02"
+    )
+  ) +
+  # custom shape legend
+  scale_shape_manual(
+    values = c(
+      "Subtidal survey \nsite"        = 24,  # filled triangle
+      "Sea otter \nobservation" = 21  # filled circle
+    )
+  ) +
+  guides(
+    fill = guide_legend(order = 1),
+    shape = guide_legend(order = 2, override.aes = list(
+      fill = c("black", "yellow"),
+      color = c("black", "black"),
+      alpha = c(1, 0.6),
+      size = c(3, 2)
+    ))
+  ) +
+  my_theme 
+#g1
 
+
+g2 <-ggplot(quad_build3 %>% filter(year(survey_date) == 2025)) +
+  # plot patches
+  geom_sf(aes(fill = pred_patch), color = "black") +
+  # add foraging locations (sea otter observations)
+  geom_sf(
+    data = scan_sf %>% filter(year == 2025),
+    aes(shape = "Sea otter \nobservation"),
+    color = "black",
+    size = 0.8,
+    alpha = 0.2
+  ) +
+  # add survey sites (subtidal sites)
+  geom_sf(
+    data = st_centroid(quad_build3 %>% filter(year(survey_date) == 2025)),
+    aes(shape = "Subtidal survey \nsite"),
+    fill = "yellow",
+    color = "black",
+    size = 1.5,
+   # alpha=0.7
+  ) +
+  # plot land
+  geom_sf(data = ca_counties, color = "grey70", fill = "grey85") +
+  coord_sf(xlim = c(-121.99, -121.88), ylim = c(36.53, 36.64)) +
+  theme_bw() +
+  labs(
+    title = "",
+    fill = "Patch type",
+    shape = ""  # legend title for shapes
+  ) +
+  scale_fill_manual(
+    values = c(
+      "BAR"   = "#7570B3",
+      "FOR"   = "#1B9E77",
+      "INCIP" = "#D95F02"
+    )
+  ) +
+  # custom shape legend
+  scale_shape_manual(
+    values = c(
+      "Subtidal survey \nsite"        = 24,  # filled triangle
+      "Sea otter \nobservation" = 21  # filled circle
+    )
+  ) +
+  guides(
+    fill = guide_legend(order = 1),
+    shape = guide_legend(order = 2, override.aes = list(
+      fill = c("black", "yellow"),
+      color = c("black", "black"),
+      alpha = c(1, 0.6),
+      size = c(3, 2)
+    ))
+  ) +
+  my_theme 
+#g2
+
+g <- ggarrange(g1, g2, common.legend = TRUE, legend = "right")
+
+ggsave(
+   here::here("figures", "Fig1_map_figure.png"),
+   g,
+   width = 7, height = 4, dpi = 600, bg = "white"
+ )
 
 
 
