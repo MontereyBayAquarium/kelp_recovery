@@ -200,7 +200,7 @@ capture.output(rules_txt, file = here::here("output","incipient_rules.txt"))
 
 
 # ---- Partial dependence for top INCIP features ----
-top_incip_feats <- head(summ_inc$feature, 9)
+top_incip_feats <- head(summ_inc$feature, 6)
 pdp_list <- lapply(top_incip_feats, function(v) {
   pdp::partial(rf_fit, pred.var = v,
                train = base_2024 %>% select(all_of(predictor_cols)),
@@ -266,6 +266,132 @@ ggplot(lda_df, aes(LD1, LD2, color = site_type)) +
     x = "LD1 (main separation axis)",
     y = "LD2"
   )
+
+
+
+
+
+
+
+
+
+
+
+
+
+library(ggplot2)
+library(patchwork)
+library(forcats)
+library(dplyr)
+
+# ------------------------------------------------------------
+# PANEL A: Multivariate separation (LDA)
+# ------------------------------------------------------------
+lda_pred <- predict(lda_fit)
+lda_df <- data.frame(lda_pred$x, site_type = y_train)
+
+pA <- ggplot(lda_df, aes(LD1, LD2, color = site_type)) +
+  geom_point(size = 3, alpha = 0.8) +
+  stat_ellipse(level = 0.68, linetype = 2) +
+  scale_color_manual(values = c("BAR"="purple","INCIP"="orange","FOR"="forestgreen")) +
+  theme_minimal(base_size = 12) +
+  labs(
+    title = "A",
+    x = "LD1",
+    y = "LD2",
+    color = "Patch type"
+  ) + theme_bw()
+
+# ------------------------------------------------------------
+# PANEL B: Variable importance (RF)
+# ------------------------------------------------------------
+pB <- rf_imp_tbl %>%
+  slice_max(importance, n = 15) %>%
+  ggplot(aes(x = reorder(feature, importance), y = importance)) +
+  geom_col(fill = "darkolivegreen4") +
+  coord_flip() +
+  theme_minimal(base_size = 12) +
+  labs(
+    title = "B",
+    x = NULL,
+    y = "Importance"
+  )
+
+# ------------------------------------------------------------
+# PANEL C: Top 6 defining features of incipient forests
+# ------------------------------------------------------------
+pC <- summ_inc %>%
+  slice_max(abs(s_md), n = 15) %>%
+  mutate(feature = fct_reorder(feature, s_md)) %>%
+  ggplot(aes(x = feature, y = s_md, fill = s_md > 0)) +
+  geom_col() +
+  coord_flip() +
+  scale_fill_manual(values = c("TRUE"="forestgreen","FALSE"="firebrick")) +
+  theme_minimal(base_size = 12) +
+  labs(
+    title = "C",
+    x = NULL,
+    y = "Standardized mean difference (INCIP vs others)"
+  ) +
+  guides(fill = "none")
+
+# ------------------------------------------------------------
+# Combine top row (A–C)
+# ------------------------------------------------------------
+top_row <- pA + pB + pC + plot_layout(ncol = 3, widths = c(1.2, 1, 1))
+
+# ------------------------------------------------------------
+# PANEL D–I: Partial dependence curves (INCIP probability vs top features)
+# ------------------------------------------------------------
+# Make sure pdp_list and top_incip_feats exist
+pdp_plots <- lapply(seq_along(pdp_list), function(i) {
+  autoplot(pdp_list[[i]]) +
+    labs(
+      title = paste0(letters[i + 3], "", top_incip_feats[i]),
+      y = "Predicted INCIP probability",
+      x = top_incip_feats[i]
+    ) +
+    theme_minimal(base_size = 11)
+})
+
+# Combine PDPs into a grid (second row)
+bottom_row <- patchwork::wrap_plots(pdp_plots, ncol = 3)
+
+# ------------------------------------------------------------
+# Final figure assembly
+# ------------------------------------------------------------
+final_fig <- top_row / bottom_row +
+  plot_layout(heights = c(1, 0.9)) &
+  theme(
+    plot.title = element_text(face = "bold", size = 13),
+    panel.grid.minor = element_blank()
+  )
+
+final_fig
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
