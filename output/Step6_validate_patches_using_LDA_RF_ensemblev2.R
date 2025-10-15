@@ -305,7 +305,7 @@ pdp_list <- lapply(top_incip_feats, function(v) {
    geom_col(fill = "grey40") +
    coord_flip() +
    theme_bw() + my_theme +
-   labs(x = NULL, y = "Patch feature \n importance")
+   labs(x = NULL, y = "Features predicting \n patch types")
  
  # ------------------------------------------------------------
  # PANEL C: Feature contrasts
@@ -319,7 +319,7 @@ pdp_list <- lapply(top_incip_feats, function(v) {
    coord_flip() +
    scale_fill_manual(values = c("TRUE"="#E69F00","FALSE"="#5D729D")) +
    theme_bw() + my_theme +
-   labs(x = NULL, y = "Incipient forest \n importance") +
+   labs(x = NULL, y = "Features predicting \n incipient forests") +
    guides(fill = "none")
  
  # ------------------------------------------------------------
@@ -360,26 +360,31 @@ pdp_list <- lapply(top_incip_feats, function(v) {
  })
  
  # ---- Combine PDPs into one grid with shared y-axis label ----
+ # ---- Combine PDPs into one grid with shared y-axis label ----
  pdp_grid <- patchwork::wrap_plots(pdp_multi_list, ncol = 3)
  
- bottom_row <- (
+ # Combine into a single object without triggering new tags
+ bottom_row_core <- pdp_grid & theme(plot.tag = element_text(size = 10))
+ 
+ # Add shared y-axis label as an inset element (avoids tag duplication)
+ bottom_row <- patchwork::inset_element(
+   bottom_row_core,
+   left = 0.06, right = 1, bottom = 0, top = 1,
+   align_to = "full"
+ ) + 
    patchwork::wrap_elements(
      full = grid::textGrob(
        "Predicted probability", rot = 90,
        gp = grid::gpar(fontsize = 10, col = "black", fontface = "plain")
      )
-   ) + pdp_grid + patchwork::plot_spacer()
- ) +
-   plot_layout(widths = c(0.01, 1, 0.1)) &
-   theme(plot.tag = element_text(size = 10))
+   )
  
- # ------------------------------------------------------------
- # Final figure assembly — tags appear automatically (A–I)
- # ------------------------------------------------------------
- final_fig <- (top_row / bottom_row) +
+ # ---- Final figure assembly (only one tag annotation!) ----
+ final_fig <- (top_row / bottom_row_core) +
    plot_layout(heights = c(1, 0.9)) +
    plot_annotation(tag_levels = "A") &
    theme(plot.tag = element_text(size = 10))
+ 
  
  # ------------------------------------------------------------
  # Display and save
