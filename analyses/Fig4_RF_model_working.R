@@ -12,12 +12,53 @@ librarian::shelf(
   viridis, here
 )
 
+
+# ----------------------------- LOAD DATA --------------------------------------
+datdir <- here::here("output")
+load(here::here("output", "survey_data", "processed", "zone_level_data2.rda"))
+scan_orig <- read_csv(file.path(here::here("output","scans","scans_data.csv")))
+dissection_data <- read_csv("/Volumes/enhydra/data/kelp_recovery/MBA_kelp_forest_database/processed/dissection/dissection_data_cleanedv2.csv")
+
+# ----------------------------- agg dissection dat ----------------------------------
+
+dissect_build1 <- dissection_data %>%
+  mutate(
+    species = str_to_lower(species),        # make all lowercase
+    species = str_trim(species),            # remove extra spaces
+    species = case_when(
+      species %in% c("red_urchin", "red urchin", "red_urchins") ~ "red_urchin",
+      species %in% c("purple_urchin", "purple_urchins", "purple urchin") ~ "purple_urchin",
+      TRUE ~ species))%>%
+  mutate(year = year(date_collected)) %>%
+  group_by(year, site_number, site_type, zone, species) %>%
+  summarise(
+    mean_gonad_mass_g = mean(gonad_mass_g, na.rm = TRUE),
+    mean_gonad_index  = mean(gonad_index, na.rm = TRUE),
+    n = n(),
+    .groups = "drop"
+  ) %>%
+  pivot_wider(
+    names_from = species,
+    values_from = c(mean_gonad_mass_g, mean_gonad_index, n),
+    names_sep = "_"
+  )
+
+# ----------------------------- join with quad data ----------------------------------
+
+quad_build4 <- quad_build3 %>%
+                mutate(year = year(survey_date))%>%
+                left_join(dissect_build1, by = c("year","site"="site_number","site_type","zone")) 
+
 # ----------------------------- USER SETTINGS ----------------------------------
 predictors <- c(
   "purple_urchin_densitym2",
   "purple_urchin_conceiledm2",
-  "relief_cm",
-  "risk_index",
+  "mean_gonad_index_purple_urchin",
+  "red_urchin_densitym2",
+  "red_urchin_conceiledm2",
+  #"mean_gonad_index_red_urchin",
+ # "relief_cm",
+#  "risk_index",
   "macro_stipe_density_20m2",
   "density20m2_nerlue"
 )
@@ -26,10 +67,6 @@ center_effects <- TRUE
 years_keep     <- c(2024, 2025)
 patch_colors   <- c("BAR"="#E41A1C", "INCIP"="#377EB8", "FOR"="#4DAF4A")
 
-# ----------------------------- LOAD DATA --------------------------------------
-datdir <- here::here("output")
-load(here::here("output", "survey_data", "processed", "zone_level_data2.rda"))
-scan_orig <- read_csv(file.path(here::here("output","scans","scans_data.csv")))
 
 # ----------------------------- CLEAN SCAN DATA --------------------------------
 scan_clean <- scan_orig %>%
@@ -45,10 +82,10 @@ scan_clean <- scan_orig %>%
 
 # Convert to sf
 scan_sf <- scan_clean %>%
-  st_as_sf(coords = c("long", "lat"), crs = st_crs(quad_build3))
+  st_as_sf(coords = c("long", "lat"), crs = st_crs(quad_build4))
 
 # -------------------------- JOIN SCANS TO PATCHES -----------------------------
-pts_joined <- st_join(scan_sf, quad_build3, join = st_intersects, left = TRUE) %>%
+pts_joined <- st_join(scan_sf, quad_build4, join = st_intersects, left = TRUE) %>%
   mutate(
     year = lubridate::year(date),
     pred_patch = case_when(
@@ -74,7 +111,7 @@ avg_foraging_by_patchyr <- pts_joined %>%
   )
 
 # -------------------------- AGGREGATE BENTHIC PREDICTORS ----------------------
-quad_year <- quad_build3 %>%
+quad_year <- quad_build4 %>%
   mutate(
     year = lubridate::year(survey_date),
     pred_patch = case_when(
@@ -210,3 +247,234 @@ g2 <- ggplot(
 
 # ------------------------------ COMBINE & DISPLAY -----------------------------
 gridExtra::grid.arrange(g1, g2, heights = c(0.42, 0.58))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+library(dplyr)
+library(ggplot2)
+library(rstatix)
+library(ggpubr)
+
+# --- choose species variable ---
+species_var <- "mean_gonad_index_purple_urchin"  # or "mean_gonad_index_red_urchin"
+
+# --- prep data ---
+gonad_dat <- quad_build4 %>%
+  mutate(pred_patch = case_when(
+    str_detect(tolower(pred_patch), "bar")   ~ "BAR",
+    str_detect(tolower(pred_patch), "incip") ~ "INCIP",
+    str_detect(tolower(pred_patch), "for")   ~ "FOR",
+    TRUE ~ toupper(pred_patch)
+  )) %>%
+  filter(year %in% c(2024, 2025)) %>%
+  drop_na({{ species_var }}) %>%
+  mutate(pred_patch = factor(pred_patch, levels = c("BAR", "INCIP", "FOR")))
+
+# --- check assumptions ---
+# histogram (quick sanity check)
+ggplot(gonad_dat, aes(x = .data[[species_var]])) +
+  geom_histogram(bins = 20, fill = "gray70", color = "white") +
+  facet_wrap(~ pred_patch, scales = "free_y")
+
+# --- Kruskal–Wallis test (non-parametric ANOVA) ---
+kw_res <- kruskal_test(gonad_dat, formula = as.formula(paste(species_var, "~ pred_patch")))
+kw_res
+
+
+# --- pairwise Wilcoxon tests with FDR correction ---
+library(rstatix)
+
+pairwise_res <- gonad_dat %>%
+  st_drop_geometry() %>%      # 👈 remove sf geometry column
+  pairwise_wilcox_test(
+    formula = as.formula(paste(species_var, "~ pred_patch")),
+    p.adjust.method = "fdr"
+  )
+
+pairwise_res
+
+
+
+# boxplot with significance brackets
+ggboxplot(gonad_dat, x = "pred_patch", y = species_var,
+          fill = "pred_patch", palette = c("BAR"="#E41A1C", "INCIP"="#377EB8", "FOR"="#4DAF4A")) +
+  stat_compare_means(method = "kruskal.test", label.y = max(gonad_dat[[species_var]], na.rm = TRUE) * 1.1) + # global p
+  stat_compare_means(
+    comparisons = list(c("BAR", "INCIP"), c("BAR", "FOR"), c("INCIP", "FOR")),
+    method = "wilcox.test",
+    label = "p.signif",
+    hide.ns = TRUE
+  ) +
+  labs(
+    x = "Patch Type",
+    y = "Mean Gonad Index",
+    title = paste("Differences in Gonad Index among Patch Types –", gsub("mean_gonad_index_", "", species_var))
+  ) +
+  theme_bw(base_size = 13)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+library(dplyr)
+library(stringr)
+library(ggplot2)
+library(sf)
+library(ggpubr)
+library(rstatix)
+
+# --- 1. Clean species names and prep dissection data ---
+dissect_raw <- dissection_data %>%
+  mutate(
+    species = str_to_lower(species),
+    species = str_trim(species),
+    species = case_when(
+      species %in% c("red_urchin", "red urchins", "red urchin") ~ "red_urchin",
+      species %in% c("purple_urchin", "purple urchins", "purple urchin") ~ "purple_urchin",
+      TRUE ~ species
+    ),
+    year = lubridate::year(date_collected)
+  )
+
+# --- 2. Clean patch dataset to ensure consistent patch labels ---
+quad_clean <- quad_build3 %>%
+  st_drop_geometry() %>%
+  mutate(
+    pred_patch = case_when(
+      str_detect(tolower(pred_patch), "bar")   ~ "BAR",
+      str_detect(tolower(pred_patch), "incip") ~ "INCIP",
+      str_detect(tolower(pred_patch), "for")   ~ "FOR",
+      TRUE ~ toupper(pred_patch)
+    ),
+    year = lubridate::year(survey_date)
+  ) %>%
+  select(year, site, site_type, zone, pred_patch) %>%
+  distinct()
+
+# --- 3. Join patch type into dissection data ---
+dissect_joined <- dissect_raw %>%
+  left_join(quad_clean,
+            by = c("year", "site_number" = "site",
+                   "site_type", "zone"))
+
+
+# choose species
+sp_use <- "purple_urchin"
+
+dissect_sp <- dissect_joined %>%
+  filter(species == sp_use, !is.na(pred_patch), !is.na(gonad_index)) %>%
+  mutate(pred_patch = factor(pred_patch, levels = c("BAR", "INCIP", "FOR")))
+
+
+
+
+# Kruskal–Wallis (overall difference)
+kruskal_test(gonad_index ~ pred_patch, data = dissect_sp)
+
+# Pairwise Wilcoxon with FDR correction
+pairwise_res <- dissect_sp %>%
+  pairwise_wilcox_test(gonad_index ~ pred_patch, p.adjust.method = "fdr")
+pairwise_res
+
+
+patch_cols <- c("BAR"="#E41A1C", "INCIP"="#377EB8", "FOR"="#4DAF4A")
+
+ggboxplot(
+  dissect_sp %>% filter(gonad_index < 20),
+  x = "pred_patch", y = "gonad_index",
+  fill = "pred_patch", palette = patch_cols,
+  add = "jitter",
+  add.params = list(alpha = 0.3, 
+                    size = 1.8, 
+                    shape = 21,
+                    width = 0.1)  
+) +
+  stat_compare_means(
+    method = "kruskal.test",
+    label.y = max(dissect_sp$gonad_index, na.rm = TRUE) * 0.8
+  ) +
+  stat_compare_means(
+    comparisons = list(c("BAR", "INCIP"), c("BAR", "FOR"), c("INCIP", "FOR")),
+    method = "wilcox.test",
+    label = "p.signif",
+    hide.ns = TRUE
+  ) +
+  labs(
+    x = "Patch Type",
+    y = "Gonad Index",
+    title = paste("Individual", gsub("_", " ", sp_use), "Gonad Index by Patch Type")
+  ) +
+  theme_bw(base_size = 13) +
+  theme(legend.position = "none")
+
+
+
+
+
+library(ggpubr)
+
+ggplot(dissect_sp %>% filter(gonad_index < 20),
+       aes(x = pred_patch, y = gonad_index, fill = pred_patch)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(
+    width = 0.12, height = 0,
+    alpha = 0.4, size = 1.8, shape = 21,
+    color = "black"          # 👈 black outline
+  ) +
+  scale_fill_manual(values = patch_cols) +
+  stat_compare_means(
+    method = "kruskal.test",
+    label.y = 20.5            
+  ) +
+  stat_compare_means(
+    comparisons = list(c("BAR","INCIP"), c("BAR","FOR"), c("INCIP","FOR")),
+    method = "wilcox.test",
+    label = "p.signif",
+    hide.ns = TRUE,
+    label.y = c(18, 19, 20)   
+  ) +
+  labs(
+    x = "Patch Type",
+    y = "Gonad Index",
+    title = paste("Gonad index by patch type")
+  ) +
+  theme_bw(base_size = 13) +
+  theme(
+    legend.position = "none",
+    panel.grid = element_blank()
+  )
+
+
