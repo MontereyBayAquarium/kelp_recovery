@@ -213,233 +213,183 @@ pdp_list <- lapply(top_incip_feats, function(v) {
 # visualize
 
 
-
-rf_imp_tbl %>%
-  slice_max(importance, n = 15) %>%
-  ggplot(aes(x = reorder(feature, importance), y = importance)) +
-  geom_col(fill = "darkolivegreen4") +
-  coord_flip() +
-  theme_minimal() +
-  labs(
-    title = "Top 15 predictors distinguishing patch types",
-    x = "Feature",
-    y = "Variable importance (RF impurity)"
-  )
-
-
-summ_inc %>%
-  slice_max(abs(s_md), n = 20) %>%
-  ggplot(aes(x = reorder(feature, s_md), y = s_md)) +
-  geom_col(aes(fill = s_md > 0)) +
-  coord_flip() +
-  scale_fill_manual(values = c("TRUE" = "forestgreen", "FALSE" = "firebrick")) +
-  theme_minimal() +
-  labs(
-    title = "Features elevated (+) or reduced (–) in Incipient forests",
-    x = "Feature",
-    y = "Standardized mean difference (INCIP vs others)"
-  )
-
-
-library(patchwork)
-pdp_plots <- lapply(seq_along(pdp_list), function(i) {
-  autoplot(pdp_list[[i]]) +
-    labs(
-      title = paste0("INCIP probability vs ", top_incip_feats[i]),
-      y = "Predicted INCIP probability",
-      x = top_incip_feats[i]
-    ) +
-    theme_minimal(base_size = 11)
-})
-patchwork::wrap_plots(pdp_plots)
-
-
-
-lda_pred <- predict(lda_fit)
-lda_df <- data.frame(lda_pred$x, site_type = y_train)
-
-ggplot(lda_df, aes(LD1, LD2, color = site_type)) +
-  geom_point(size = 3, alpha = 0.8) +
-  theme_minimal() +
-  labs(
-    title = "Linear Discriminant space of patch types",
-    x = "LD1 (main separation axis)",
-    y = "LD2"
-  )
-
-
-
-
-
-
-
-
-
-
-
-
-
-library(ggplot2)
-library(patchwork)
-library(forcats)
-library(dplyr)
-
-# ------------------------------------------------------------
-# PANEL A: Multivariate separation (LDA)
-# ------------------------------------------------------------
-lda_pred <- predict(lda_fit)
-lda_df <- data.frame(lda_pred$x, site_type = y_train)
-
-pA <- ggplot(lda_df, aes(LD1, LD2, color = site_type)) +
-  geom_point(size = 3, alpha = 0.8) +
-  stat_ellipse(level = 0.68, linetype = 2) +
-  scale_color_manual(values = c("BAR"="purple","INCIP"="orange","FOR"="forestgreen")) +
-  theme_minimal(base_size = 12) +
-  labs(
-    title = "A",
-    x = "LD1",
-    y = "LD2",
-    color = "Patch type"
-  ) + theme_bw()
-
-# ------------------------------------------------------------
-# PANEL B: Variable importance (RF)
-# ------------------------------------------------------------
-pB <- rf_imp_tbl %>%
-  slice_max(importance, n = 15) %>%
-  ggplot(aes(x = reorder(feature, importance), y = importance)) +
-  geom_col(fill = "darkolivegreen4") +
-  coord_flip() +
-  theme_minimal(base_size = 12) +
-  labs(
-    title = "B",
-    x = NULL,
-    y = "Importance"
-  )
-
-# ------------------------------------------------------------
-# PANEL C: Top 6 defining features of incipient forests
-# ------------------------------------------------------------
-pC <- summ_inc %>%
-  slice_max(abs(s_md), n = 15) %>%
-  mutate(feature = fct_reorder(feature, s_md)) %>%
-  ggplot(aes(x = feature, y = s_md, fill = s_md > 0)) +
-  geom_col() +
-  coord_flip() +
-  scale_fill_manual(values = c("TRUE"="forestgreen","FALSE"="firebrick")) +
-  theme_minimal(base_size = 12) +
-  labs(
-    title = "C",
-    x = NULL,
-    y = "Standardized mean difference (INCIP vs others)"
-  ) +
-  guides(fill = "none")
-
-# ------------------------------------------------------------
-# Combine top row (A–C)
-# ------------------------------------------------------------
-top_row <- pA + pB + pC + plot_layout(ncol = 3, widths = c(1.2, 1, 1))
-
-# ------------------------------------------------------------
-# PANEL D–I: Partial dependence curves (INCIP probability vs top features)
-# ------------------------------------------------------------
-
-# Define color palette by patch type
-patch_cols <- c("BAR"="purple", "INCIP"="orange", "FOR"="forestgreen")
-
-# Create a list of partial dependence plots for all 3 classes
-pdp_multi_list <- lapply(top_incip_feats, function(v) {
-  pd_all <- lapply(cls, function(cl) {
-    pdp::partial(
-      rf_fit, 
-      pred.var = v,
-      train = base_2024 %>% select(all_of(predictor_cols)),
-      which.class = cl,
-      prob = TRUE
-    ) %>%
-      mutate(site_type = cl)
-  }) %>%
-    bind_rows()
-  
-  # Median/IQR lines for data distribution
-  pdat <- base_2024[[v]]
-  
-  ggplot(pd_all, aes_string(x = v, y = "yhat", color = "site_type")) +
-    geom_line(linewidth = 1) +
-    geom_vline(xintercept = median(pdat, na.rm = TRUE), linetype = "dashed", color = "grey40") +
-    geom_vline(xintercept = quantile(pdat, c(0.25, 0.75), na.rm = TRUE),
-               linetype = "dotted", color = "grey60") +
-    scale_color_manual(values = patch_cols) +
-    theme_minimal(base_size = 11) +
-    labs(
-      title = paste0("INCIP probability vs ", v),
-      y = "Predicted probability",
-      x = v,
-      color = "Patch type"
-    )
-})
-
-# Manually tag PDP plots (D–I)
-pdp_multi_tagged <- lapply(seq_along(pdp_multi_list), function(i) {
-  pdp_multi_list[[i]] +
-    labs(tag = LETTERS[i + 3]) +
-    theme(
-      plot.tag = element_text(face = "bold", size = 14),
-      legend.position = "none"
-    )
-})
-
-
-# Combine into a grid
-bottom_row <- patchwork::wrap_plots(pdp_multi_tagged, ncol = 3)
-
-# ------------------------------------------------------------
-# Final figure assembly
-# ------------------------------------------------------------
-final_fig <- top_row / bottom_row +
-  plot_layout(heights = c(1, 0.9)) &
-  theme(
-    plot.title = element_text(face = "bold", size = 13),
-    panel.grid.minor = element_blank()
-  )
-
-final_fig
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+ 
+ ## ============================================================
+ #  Figure: Patch type separation, feature importance,
+ #          and defining features of incipient forests
+ # ============================================================
+ 
+ library(ggplot2)
+ library(patchwork)
+ library(forcats)
+ library(dplyr)
+ library(grid)
+ 
+ # ------------------------------------------------------------
+ # Human-readable variable labels
+ # ------------------------------------------------------------
+ var_labels <- c(
+   "purple_urchin_conceiledm2" = "Sea urchin behavior",
+   "cov_fleshy_red"            = "Fleshy red algae",
+   "cov_crustose_coralline"    = "Crustose coralline algae",
+   "purple_urchin_densitym2"   = "Purple urchin density",
+   "n_macro_plants_20m2"       = "No. Macrocystis",
+   "tegula_densitym2"          = "Tegula spp.",
+   "cov_articulated_coralline" = "Articulated coralline algae",
+   "cov_barnacle"              = "Barnacle cover",
+   "cov_lam_holdfast_live"     = "Live kelp holdfast",
+   "cov_phragmatopoma"         = "Phragmatopoma spp.",
+   "cov_diopatra_chaetopterus" = "Diopatra chaetopterus",
+   "cov_tubeworm_other_solitary" = "Tubeworm",
+   "cov_bare_sand"             = "Bare sand",
+   "nerj"                      = "Juvenile N. luetkeana",
+   "lsetj"                     = "Juvenile L. setchellii",
+   "lamr"                      = "Kelp recruits",
+   "red_urchin_densitym2"      = "Red urchin density",
+   "cov_encrusting_red"        = "Encrusting red algae",
+   "cov_bare_rock"             = "Bare rock",
+   "macro_stipe_density_20m2"  = "No. kelp stipes",
+   "risk_index"                = "Rugosity",
+   "relief_cm"                 = "Habitat relief (cm)",
+   "density20m2_eisarb"        = "E. arborea",
+   "density20m2_lamset"        = "L. setchellii",
+   "density20m2_ptecal"        = "P. californica",
+   "density20m2_nerlue"        = "N. luetkeana"
+ )
+ 
+ # ------------------------------------------------------------
+ # THEME
+ # ------------------------------------------------------------
+ my_theme <- theme(
+   axis.text.x = element_text(size=10, color = "black"),
+   axis.text.y = element_text(size=10, color = "black"),
+   axis.title  = element_text(size=12,color = "black"),
+   legend.text = element_text(size=8,color = "black"),
+   legend.title= element_text(size=8,color = "black"),
+   plot.tag = element_text(size = 10, color = "black"),
+   # Gridlines
+   panel.grid.major = element_blank(), 
+   panel.grid.minor = element_blank(),
+   panel.background = element_blank(), 
+   axis.line = element_line(colour = "black"),
+   # Legend
+   legend.key = element_blank(),
+   legend.background = element_rect(fill=alpha('blue', 0)),
+   # Facets
+   strip.text = element_text(size=10, face = "bold",color = "black", hjust=0),
+   strip.background = element_blank()
+ )
+ 
+ # ------------------------------------------------------------
+ # PANEL A: LDA
+ # ------------------------------------------------------------
+ lda_pred <- predict(lda_fit)
+ lda_df <- data.frame(lda_pred$x, site_type = y_train)
+ 
+ pA <- ggplot(lda_df, aes(LD1, LD2, color = site_type)) +
+   geom_point(size = 3, alpha = 0.8) +
+   stat_ellipse(level = 0.95, linetype = 2) +
+   scale_color_manual(values = c("BAR"="purple","INCIP"="orange","FOR"="forestgreen")) +
+   theme_bw() + my_theme +
+   theme(legend.position = "bottom") +
+   labs(x = "LD1", y = "LD2", color = "Patch type")
+ # Removed coord_equal() to allow more height
+ 
+ # ------------------------------------------------------------
+ # PANEL B: RF importance
+ # ------------------------------------------------------------
+ pB <- rf_imp_tbl %>%
+   slice_max(importance, n = 15) %>%
+   mutate(feature = ifelse(feature %in% names(var_labels), var_labels[feature], feature)) %>%
+   ggplot(aes(x = reorder(feature, importance), y = importance)) +
+   geom_col(fill = "grey40") +
+   coord_flip() +
+   theme_bw() + my_theme +
+   labs(x = NULL, y = "Patch feature \n importance")
+ 
+ # ------------------------------------------------------------
+ # PANEL C: Feature contrasts
+ # ------------------------------------------------------------
+ pC <- summ_inc %>%
+   slice_max(abs(s_md), n = 15) %>%
+   mutate(feature = ifelse(feature %in% names(var_labels), var_labels[feature], feature)) %>%
+   mutate(feature = fct_reorder(feature, s_md)) %>%
+   ggplot(aes(x = feature, y = s_md, fill = s_md > 0)) +
+   geom_col() +
+   coord_flip() +
+   scale_fill_manual(values = c("TRUE"="#E69F00","FALSE"="#5D729D")) +
+   theme_bw() + my_theme +
+   labs(x = NULL, y = "Incipient forest \n importance") +
+   guides(fill = "none")
+ 
+ # ------------------------------------------------------------
+ # Combine top row (A–C)
+ # ------------------------------------------------------------
+ top_row <- pA + pB + pC + 
+   plot_layout(ncol = 3, widths = c(1.5, 1, 1))  # widen A slightly again
+ 
+ # ------------------------------------------------------------
+ # PANEL D–I: Partial dependence curves (INCIP probability vs top features)
+ # ------------------------------------------------------------
+ patch_cols <- c("BAR"="purple", "INCIP"="orange", "FOR"="forestgreen")
+ 
+ # Build partial dependence plots for top features
+ pdp_multi_list <- lapply(top_incip_feats, function(v) {
+   pd_all <- lapply(cls, function(cl) {
+     pdp::partial(
+       rf_fit, 
+       pred.var = v,
+       train = base_2024 %>% select(all_of(predictor_cols)),
+       which.class = cl,
+       prob = TRUE
+     ) %>%
+       mutate(site_type = cl)
+   }) %>%
+     bind_rows()
+   
+   # Label x-axis using pretty variable name if available
+   x_label <- ifelse(v %in% names(var_labels), var_labels[[v]], v)
+   
+   ggplot(pd_all, aes_string(x = v, y = "yhat", color = "site_type")) +
+     geom_line(linewidth = 1.5) +
+     scale_color_manual(values = patch_cols) +
+     theme_bw() + my_theme +
+     labs(x = x_label, color = "Patch type") +
+     theme(legend.position = "none",
+           axis.title.y = element_blank())
+ })
+ 
+ # ---- Combine PDPs into one grid with shared y-axis label ----
+ pdp_grid <- patchwork::wrap_plots(pdp_multi_list, ncol = 3)
+ 
+ bottom_row <- (
+   patchwork::wrap_elements(
+     full = grid::textGrob(
+       "Predicted probability", rot = 90,
+       gp = grid::gpar(fontsize = 10, col = "black", fontface = "plain")
+     )
+   ) + pdp_grid + patchwork::plot_spacer()
+ ) +
+   plot_layout(widths = c(0.01, 1, 0.1)) &
+   theme(plot.tag = element_text(size = 10))
+ 
+ # ------------------------------------------------------------
+ # Final figure assembly — tags appear automatically (A–I)
+ # ------------------------------------------------------------
+ final_fig <- (top_row / bottom_row) +
+   plot_layout(heights = c(1, 0.9)) +
+   plot_annotation(tag_levels = "A") &
+   theme(plot.tag = element_text(size = 10))
+ 
+ # ------------------------------------------------------------
+ # Display and save
+ # ------------------------------------------------------------
+ final_fig
+ 
+ ggsave(
+   here::here("figures", "Fig2_incipient_feature_figure.png"),
+   final_fig,
+   width = 10, height = 9, dpi = 600
+ )
+ 
+ 
