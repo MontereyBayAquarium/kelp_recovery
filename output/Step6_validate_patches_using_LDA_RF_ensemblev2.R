@@ -343,19 +343,55 @@ top_row <- pA + pB + pC + plot_layout(ncol = 3, widths = c(1.2, 1, 1))
 # ------------------------------------------------------------
 # PANEL D–I: Partial dependence curves (INCIP probability vs top features)
 # ------------------------------------------------------------
-# Make sure pdp_list and top_incip_feats exist
-pdp_plots <- lapply(seq_along(pdp_list), function(i) {
-  autoplot(pdp_list[[i]]) +
+
+# Define color palette by patch type
+patch_cols <- c("BAR"="purple", "INCIP"="orange", "FOR"="forestgreen")
+
+# Create a list of partial dependence plots for all 3 classes
+pdp_multi_list <- lapply(top_incip_feats, function(v) {
+  pd_all <- lapply(cls, function(cl) {
+    pdp::partial(
+      rf_fit, 
+      pred.var = v,
+      train = base_2024 %>% select(all_of(predictor_cols)),
+      which.class = cl,
+      prob = TRUE
+    ) %>%
+      mutate(site_type = cl)
+  }) %>%
+    bind_rows()
+  
+  # Median/IQR lines for data distribution
+  pdat <- base_2024[[v]]
+  
+  ggplot(pd_all, aes_string(x = v, y = "yhat", color = "site_type")) +
+    geom_line(linewidth = 1) +
+    geom_vline(xintercept = median(pdat, na.rm = TRUE), linetype = "dashed", color = "grey40") +
+    geom_vline(xintercept = quantile(pdat, c(0.25, 0.75), na.rm = TRUE),
+               linetype = "dotted", color = "grey60") +
+    scale_color_manual(values = patch_cols) +
+    theme_minimal(base_size = 11) +
     labs(
-      title = paste0(letters[i + 3], "", top_incip_feats[i]),
-      y = "Predicted INCIP probability",
-      x = top_incip_feats[i]
-    ) +
-    theme_minimal(base_size = 11)
+      title = paste0("INCIP probability vs ", v),
+      y = "Predicted probability",
+      x = v,
+      color = "Patch type"
+    )
 })
 
-# Combine PDPs into a grid (second row)
-bottom_row <- patchwork::wrap_plots(pdp_plots, ncol = 3)
+# Manually tag PDP plots (D–I)
+pdp_multi_tagged <- lapply(seq_along(pdp_multi_list), function(i) {
+  pdp_multi_list[[i]] +
+    labs(tag = LETTERS[i + 3]) +
+    theme(
+      plot.tag = element_text(face = "bold", size = 14),
+      legend.position = "none"
+    )
+})
+
+
+# Combine into a grid
+bottom_row <- patchwork::wrap_plots(pdp_multi_tagged, ncol = 3)
 
 # ------------------------------------------------------------
 # Final figure assembly
@@ -368,6 +404,16 @@ final_fig <- top_row / bottom_row +
   )
 
 final_fig
+
+
+
+
+
+
+
+
+
+
 
 
 
