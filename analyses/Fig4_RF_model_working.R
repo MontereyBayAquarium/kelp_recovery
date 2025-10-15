@@ -1,9 +1,11 @@
-################################################################################
+
 # RF model of sea otter foraging intensity across benthic patch types
 # Joshua G. Smith – UCSC Nearshore Ecology Research Group
-################################################################################
 
-# ----------------------------- LOAD PACKAGES ----------------------------------
+
+################################################################################
+#load packages and data
+
 rm(list = ls())
 require(librarian)
 librarian::shelf(
@@ -12,14 +14,13 @@ librarian::shelf(
   viridis, here
 )
 
-
-# ----------------------------- LOAD DATA --------------------------------------
 datdir <- here::here("output")
-load(here::here("output", "survey_data", "processed", "zone_level_data2.rda"))
+load(here::here("output", "survey_data", "processed", "zone_level_data3.rda"))
 scan_orig <- read_csv(file.path(here::here("output","scans","scans_data.csv")))
 dissection_data <- read_csv("/Volumes/enhydra/data/kelp_recovery/MBA_kelp_forest_database/processed/dissection/dissection_data_cleanedv2.csv")
 
-# ----------------------------- agg dissection dat ----------------------------------
+################################################################################
+#Prep dissection data
 
 dissect_build1 <- dissection_data %>%
   mutate(
@@ -43,13 +44,15 @@ dissect_build1 <- dissection_data %>%
     names_sep = "_"
   )
 
-# ----------------------------- join with quad data ----------------------------------
-
+#Join with quad data
 quad_build4 <- quad_build3 %>%
                 mutate(year = year(survey_date))%>%
                 left_join(dissect_build1, by = c("year","site"="site_number","site_type","zone")) 
 
-# ----------------------------- USER SETTINGS ----------------------------------
+
+################################################################################
+#Prep RF model
+
 predictors <- c(
   "purple_urchin_densitym2",
   "purple_urchin_conceiledm2",
@@ -65,10 +68,10 @@ predictors <- c(
 
 center_effects <- TRUE
 years_keep     <- c(2024, 2025)
-patch_colors   <- c("BAR"="#E41A1C", "INCIP"="#377EB8", "FOR"="#4DAF4A")
+patch_colors   <- c("BAR"="purple", "INCIP"="orange", "FOR"="forestgreen")
 
 
-# ----------------------------- CLEAN SCAN DATA --------------------------------
+#clean up scan data
 scan_clean <- scan_orig %>%
   clean_names() %>%
   mutate(
@@ -84,7 +87,7 @@ scan_clean <- scan_orig %>%
 scan_sf <- scan_clean %>%
   st_as_sf(coords = c("long", "lat"), crs = st_crs(quad_build4))
 
-# -------------------------- JOIN SCANS TO PATCHES -----------------------------
+# Join scans to patches
 pts_joined <- st_join(scan_sf, quad_build4, join = st_intersects, left = TRUE) %>%
   mutate(
     year = lubridate::year(date),
@@ -97,7 +100,7 @@ pts_joined <- st_join(scan_sf, quad_build4, join = st_intersects, left = TRUE) %
   ) %>%
   filter(year %in% years_keep)
 
-# ------------------------- BUILD PATCH-YEAR FORAGING DATA ---------------------
+#build patch-year level foraging data
 # Average number of foraging individuals per scan within each patch-year
 avg_foraging_by_patchyr <- pts_joined %>%
   st_drop_geometry() %>%
@@ -110,7 +113,7 @@ avg_foraging_by_patchyr <- pts_joined %>%
     .groups = "drop"
   )
 
-# -------------------------- AGGREGATE BENTHIC PREDICTORS ----------------------
+# aggregate benthic predictors
 quad_year <- quad_build4 %>%
   mutate(
     year = lubridate::year(survey_date),
@@ -126,13 +129,13 @@ quad_year <- quad_build4 %>%
   group_by(patch_id, year, pred_patch) %>%
   summarise(across(all_of(predictors), ~ mean(.x, na.rm = TRUE)), .groups = "drop")
 
-# ------------------------------ MERGE & PREP RF DATA --------------------------
+# merge and prep rf data
 rf_data <- avg_foraging_by_patchyr %>%
   inner_join(quad_year, by = c("patch_id", "year", "pred_patch")) %>%
   mutate(avg_foraging_log = log1p(avg_foraging)) %>%
   drop_na(avg_foraging_log, all_of(predictors))
 
-# ------------------------------- RUN RF BY PATCH ------------------------------
+# run RF model
 patches <- sort(unique(rf_data$pred_patch))
 data_imp <- data_r2 <- data_marg <- NULL
 
@@ -184,7 +187,7 @@ for (i in seq_along(patches)) {
   }
 }
 
-# ------------------------------- FORMAT FOR PLOTS -----------------------------
+# format for plotting
 data_imp1 <- data_imp %>%
   rename(importance = IncNodePurity) %>%
   group_by(pred_patch) %>%
@@ -199,7 +202,8 @@ variable_importance_rank <- data_imp1 %>%
 
 data_marg2 <- data_marg %>% left_join(variable_importance_rank, by = "variable")
 
-# ------------------------------- PLOT A: IMPORTANCE ---------------------------
+################################################################################
+#Plot
 my_theme <- theme(
   axis.text  = element_text(size = 8),
   axis.title = element_text(size = 9),
@@ -230,7 +234,6 @@ g1 <- ggplot(
   theme_bw() + my_theme +
   theme(legend.position = "none", axis.text.x = element_text(angle = 60, hjust = 1))
 
-# ------------------------------- PLOT B: PARTIALS -----------------------------
 g2 <- ggplot(
   data_marg2,
   aes(x = value, y = effect, color = pred_patch)
@@ -245,118 +248,15 @@ g2 <- ggplot(
   theme_bw() + my_theme +
   theme(legend.position = "top")
 
-# ------------------------------ COMBINE & DISPLAY -----------------------------
+
 gridExtra::grid.arrange(g1, g2, heights = c(0.42, 0.58))
 
 
 
+################################################################################
+#Plot gonad index by patch type
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-library(dplyr)
-library(ggplot2)
-library(rstatix)
-library(ggpubr)
-
-# --- choose species variable ---
-species_var <- "mean_gonad_index_purple_urchin"  # or "mean_gonad_index_red_urchin"
-
-# --- prep data ---
-gonad_dat <- quad_build4 %>%
-  mutate(pred_patch = case_when(
-    str_detect(tolower(pred_patch), "bar")   ~ "BAR",
-    str_detect(tolower(pred_patch), "incip") ~ "INCIP",
-    str_detect(tolower(pred_patch), "for")   ~ "FOR",
-    TRUE ~ toupper(pred_patch)
-  )) %>%
-  filter(year %in% c(2024, 2025)) %>%
-  drop_na({{ species_var }}) %>%
-  mutate(pred_patch = factor(pred_patch, levels = c("BAR", "INCIP", "FOR")))
-
-# --- check assumptions ---
-# histogram (quick sanity check)
-ggplot(gonad_dat, aes(x = .data[[species_var]])) +
-  geom_histogram(bins = 20, fill = "gray70", color = "white") +
-  facet_wrap(~ pred_patch, scales = "free_y")
-
-# --- Kruskal–Wallis test (non-parametric ANOVA) ---
-kw_res <- kruskal_test(gonad_dat, formula = as.formula(paste(species_var, "~ pred_patch")))
-kw_res
-
-
-# --- pairwise Wilcoxon tests with FDR correction ---
-library(rstatix)
-
-pairwise_res <- gonad_dat %>%
-  st_drop_geometry() %>%      # 👈 remove sf geometry column
-  pairwise_wilcox_test(
-    formula = as.formula(paste(species_var, "~ pred_patch")),
-    p.adjust.method = "fdr"
-  )
-
-pairwise_res
-
-
-
-# boxplot with significance brackets
-ggboxplot(gonad_dat, x = "pred_patch", y = species_var,
-          fill = "pred_patch", palette = c("BAR"="#E41A1C", "INCIP"="#377EB8", "FOR"="#4DAF4A")) +
-  stat_compare_means(method = "kruskal.test", label.y = max(gonad_dat[[species_var]], na.rm = TRUE) * 1.1) + # global p
-  stat_compare_means(
-    comparisons = list(c("BAR", "INCIP"), c("BAR", "FOR"), c("INCIP", "FOR")),
-    method = "wilcox.test",
-    label = "p.signif",
-    hide.ns = TRUE
-  ) +
-  labs(
-    x = "Patch Type",
-    y = "Mean Gonad Index",
-    title = paste("Differences in Gonad Index among Patch Types –", gsub("mean_gonad_index_", "", species_var))
-  ) +
-  theme_bw(base_size = 13)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-library(dplyr)
-library(stringr)
-library(ggplot2)
-library(sf)
-library(ggpubr)
-library(rstatix)
-
-# --- 1. Clean species names and prep dissection data ---
+#prep dissection data
 dissect_raw <- dissection_data %>%
   mutate(
     species = str_to_lower(species),
@@ -369,7 +269,6 @@ dissect_raw <- dissection_data %>%
     year = lubridate::year(date_collected)
   )
 
-# --- 2. Clean patch dataset to ensure consistent patch labels ---
 quad_clean <- quad_build3 %>%
   st_drop_geometry() %>%
   mutate(
@@ -384,7 +283,7 @@ quad_clean <- quad_build3 %>%
   select(year, site, site_type, zone, pred_patch) %>%
   distinct()
 
-# --- 3. Join patch type into dissection data ---
+#join patches with dissection data
 dissect_joined <- dissect_raw %>%
   left_join(quad_clean,
             by = c("year", "site_number" = "site",
@@ -399,9 +298,7 @@ dissect_sp <- dissect_joined %>%
   mutate(pred_patch = factor(pred_patch, levels = c("BAR", "INCIP", "FOR")))
 
 
-
-
-# Kruskal–Wallis (overall difference)
+# Kruskal–Wallis 
 kruskal_test(gonad_index ~ pred_patch, data = dissect_sp)
 
 # Pairwise Wilcoxon with FDR correction
@@ -409,42 +306,8 @@ pairwise_res <- dissect_sp %>%
   pairwise_wilcox_test(gonad_index ~ pred_patch, p.adjust.method = "fdr")
 pairwise_res
 
+patch_cols <- c("BAR"="purple", "INCIP"="orange", "FOR"="forestgreen")
 
-patch_cols <- c("BAR"="#E41A1C", "INCIP"="#377EB8", "FOR"="#4DAF4A")
-
-ggboxplot(
-  dissect_sp %>% filter(gonad_index < 20),
-  x = "pred_patch", y = "gonad_index",
-  fill = "pred_patch", palette = patch_cols,
-  add = "jitter",
-  add.params = list(alpha = 0.3, 
-                    size = 1.8, 
-                    shape = 21,
-                    width = 0.1)  
-) +
-  stat_compare_means(
-    method = "kruskal.test",
-    label.y = max(dissect_sp$gonad_index, na.rm = TRUE) * 0.8
-  ) +
-  stat_compare_means(
-    comparisons = list(c("BAR", "INCIP"), c("BAR", "FOR"), c("INCIP", "FOR")),
-    method = "wilcox.test",
-    label = "p.signif",
-    hide.ns = TRUE
-  ) +
-  labs(
-    x = "Patch Type",
-    y = "Gonad Index",
-    title = paste("Individual", gsub("_", " ", sp_use), "Gonad Index by Patch Type")
-  ) +
-  theme_bw(base_size = 13) +
-  theme(legend.position = "none")
-
-
-
-
-
-library(ggpubr)
 
 ggplot(dissect_sp %>% filter(gonad_index < 20),
        aes(x = pred_patch, y = gonad_index, fill = pred_patch)) +
@@ -464,7 +327,7 @@ ggplot(dissect_sp %>% filter(gonad_index < 20),
     method = "wilcox.test",
     label = "p.signif",
     hide.ns = TRUE,
-    label.y = c(18, 19, 20)   
+    label.y = c(18, 19, 20.5)   
   ) +
   labs(
     x = "Patch Type",

@@ -35,14 +35,32 @@ scan_orig <- read_csv(file.path(here::here("output","scans","scans_data.csv")))
 site_patches <- st_read(here::here("output","gis_data","processed","site_patch_polygons.shp"))
 
 #load LDA-predicted patch types
-lda_patch <- load(here::here("output","lda_patch_transitions.rda"))
+lda_patch <- load(here::here("output","lda_patch_transitionsv2.rda"))
 
 
 ################################################################################
-#Step 1: process benthic survey data to obtain zone-level averages
-quad_zone <- quad_data %>%
-  dplyr::select(-substrate)%>%
-  group_by(survey_type, region, latitude, longitude, site, site_type,
+#Step 1: Average to site, zone, site_type for each year 
+kelp_avg <- kelp_data %>%
+  dplyr::select(-macro_stipe_sd_20m2) %>%
+  dplyr::group_by(site, site_type, latitude, longitude, zone, survey_date) %>%
+  dplyr::summarise(across(where(is.numeric), \(x) mean(x, na.rm = TRUE)), .groups = "drop") %>%
+  dplyr::select(-transect)
+
+quad_avg <- quad_data %>%
+  dplyr::group_by(site, site_type, latitude, longitude, zone, survey_date) %>%
+  dplyr::summarise(across(where(is.numeric), \(x) mean(x, na.rm = TRUE)), .groups = "drop") %>%
+  dplyr::select(-quadrat, -transect)
+
+dat_agg <- kelp_avg %>%
+  dplyr::inner_join(
+    quad_avg,
+    by = c("site","site_type","latitude","longitude","zone","survey_date"),
+    suffix = c("_kelp","_quad")
+  )
+
+
+quad_zone <- dat_agg %>%
+  group_by(latitude, longitude, site, site_type,
            survey_date, zone) %>%
   summarise(across(where(is.numeric), ~ mean(.x, na.rm = TRUE)),
             .groups = "drop")
@@ -98,8 +116,7 @@ plot(site_patches_single)
 
 #join points to polygons
 site_patches_with_points <- site_patches_single %>%
-  st_join(quad_zone_sf, join = st_intersects, left = TRUE) %>%
-  filter(!(is.na(survey_type)))
+  st_join(quad_zone_sf, join = st_intersects, left = TRUE)
 
 
 #inspect
@@ -118,10 +135,11 @@ str(site_patches_with_points)
 quad_build3 <- site_patches_with_points %>%
                 mutate(patch_cat = ifelse(year(survey_date) == 2024,"predicted 2024","predicted 2025")) %>%
                 dplyr::select(-site_type.x) %>%
-                dplyr::select(patch_id, survey_type, region, latitude, longitude, 
+                dplyr::select(patch_id, latitude, longitude, 
                        survey_date,site, site_type = site_type.y, pred_patch, 
                        everything()) %>%
-                mutate(pred_patch = ifelse(is.na(pred_patch),site_type,pred_patch))
+                mutate(pred_patch = ifelse(is.na(pred_patch),site_type,pred_patch)) %>%
+                filter(!(is.na(pred_patch)))
 
 ggplot(quad_build3) +
   geom_sf(aes(fill = pred_patch), color = "black") +
@@ -132,4 +150,7 @@ ggplot(quad_build3) +
     title = "Predicted Patch Type by Independent Polygon (2024)",
     fill = "Predicted Patch"
   )
+
+
+save(quad_build3, file = here::here("output","survey_data","processed","zone_level_data3.rda"))
 
