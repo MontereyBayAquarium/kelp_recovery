@@ -1,0 +1,14 @@
+                           BAR  FOR INCI 
+as.factor(pred) is BAR   [1.00  .00  .00] when
+                                          purple_urchin_conceiledm2 < 0.31
+
+as.factor(pred) is FOR   [ .00  .92  .08] when
+                                          purple_urchin_conceiledm2 >= 3.07
+                                          ptej < 0.031
+
+as.factor(pred) is INCIP [ .17  .33  .50] when
+                                          purple_urchin_conceiledm2 >= 3.07
+                                          ptej >= 0.031
+
+as.factor(pred) is INCIP [ .09  .09  .82] when
+                                          purple_urchin_conceiledm2 is 0.31 to 3.07
