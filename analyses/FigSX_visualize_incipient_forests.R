@@ -600,18 +600,18 @@ p4 <- ggplot() +
 #    box.padding = 0.3, point.padding = 0.5, force = 18,
 #    size = 2, min.segment.length = 0.1, segment.color = "black"
 #  ) +
-  ggsn::scalebar(x.min = -121.99, x.max = -121.88,  
-                 y.min = 36.519, y.max = 36.645,
-                 location = "bottomright",
-                 dist = 2, dist_unit = "km",
-                 transform = TRUE, model = "WGS84",
-                 st.dist = 0.02, st.size = 4,
-                 border.size = 0.5, height = 0.02
-  ) +
-  ggsn::north(x.min = -121.99, x.max = -121.88,  
-              y.min = 36.519, y.max = 36.65,
-              location = "topright", scale = 0.05, symbol = 10
-  ) +
+ # ggsn::scalebar(x.min = -121.99, x.max = -121.88,  
+  #               y.min = 36.519, y.max = 36.645,
+   #              location = "bottomright",
+    #             dist = 2, dist_unit = "km",
+     #            transform = TRUE, model = "WGS84",
+      #           st.dist = 0.02, st.size = 4,
+       #          border.size = 0.5, height = 0.02
+  #) +
+ # ggsn::north(x.min = -121.99, x.max = -121.88,  
+  #            y.min = 36.519, y.max = 36.65,
+   #           location = "topright", scale = 0.05, symbol = 10
+  #) +
   theme_bw() +
   base_theme +
   theme(axis.title = element_blank())+
