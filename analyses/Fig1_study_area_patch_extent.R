@@ -224,7 +224,8 @@ g1_inset <-  ggplotGrob(
            axis.ticks.margin = unit(0, "null"),
            axis.text = element_blank(),
            axis.title=element_blank(),
-           axis.text.y = element_blank())
+           axis.text.y = element_blank(),
+           plot.title =  element_text(hjust = 0, size=14, face = "bold"))
 )
 
 
@@ -240,8 +241,8 @@ g1 <-ggplot(quad_build3 %>% filter(year(survey_date) == 2024)) +
     data = scan_sf %>% filter(year == 2024),
     aes(shape = "Sea otter \nobservation"),
     color = "black",
-    size = 0.8,
-    alpha = 0.2
+    size = 0.5,
+    alpha = 0.3
   ) +
   # add survey sites (subtidal sites)
   geom_sf(
@@ -264,7 +265,7 @@ g1 <-ggplot(quad_build3 %>% filter(year(survey_date) == 2024)) +
     ymin = 36.62
   ) +
   labs(
-    title = "",
+    title = "2024",
     fill = "Patch type",
     shape = ""  # legend title for shapes
   ) +
@@ -303,8 +304,8 @@ g2 <-ggplot(quad_build3 %>% filter(year(survey_date) == 2025)) +
     data = scan_sf %>% filter(year == 2025),
     aes(shape = "Sea otter \nobservation"),
     color = "black",
-    size = 0.8,
-    alpha = 0.2
+    size = 0.5,
+    alpha = 0.3
   ) +
   # add survey sites (subtidal sites)
   geom_sf(
@@ -320,7 +321,7 @@ g2 <-ggplot(quad_build3 %>% filter(year(survey_date) == 2025)) +
   coord_sf(xlim = c(-121.99, -121.88), ylim = c(36.53, 36.64)) +
   theme_bw() +
   labs(
-    title = "",
+    title = "2025",
     fill = "Patch type",
     shape = ""  # legend title for shapes
   ) +
@@ -347,7 +348,7 @@ g2 <-ggplot(quad_build3 %>% filter(year(survey_date) == 2025)) +
       size = c(3, 2)
     ))
   ) +
-  my_theme 
+  my_theme
 #g2
 
 g <- ggarrange(g1, g2, common.legend = TRUE, legend = "right")
