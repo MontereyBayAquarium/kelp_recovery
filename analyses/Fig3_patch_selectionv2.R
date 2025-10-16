@@ -83,7 +83,7 @@ quad_year <- quad_build4 %>%
 # Assumes forage_orig has columns: long, lat, year, month, bout, prey (strings)
 # Keep summer/fall months if desired:
 forage_sf <- forage_orig %>%
- # filter(month %in% c(6,7,8,9)) %>%
+  #filter(month %in% c(5,6,7,8,9)) %>%
   st_as_sf(coords = c("long","lat"), crs = 4326, remove = FALSE)
 
 # Helper: flag urchin dives
@@ -91,6 +91,29 @@ is_urchin <- function(x) {
   # Expand patterns as needed (scientific names, etc.)
   str_detect(x, regex("urch|red|pur|uni|Strongylocentrotus|Mesocentrotus", ignore_case = TRUE))
 }
+
+# Summarise each bout by prey composition and centroid
+#bout_summary <- forage_sf %>%
+#  group_by(bout) %>%
+#  summarise(
+#    year         = first(year),
+#    total_dives  = n(),
+#    n_urchin     = sum(is_urchin(prey), na.rm = TRUE),
+#    n_other      = sum(!is_urchin(prey), na.rm = TRUE),
+#    prop_urchin  = if_else(total_dives > 0, n_urchin / total_dives, NA_real_),
+#    prey_types   = paste(sort(unique(prey)), collapse = ","),
+#    geometry     = st_centroid(st_union(geometry)),
+#    .groups      = "drop"
+#  ) %>%
+#  mutate(
+#    # Dominant-prey classification (you can adjust threshold)
+#    prey_focus = case_when(
+#      is.na(prop_urchin) | total_dives == 0 ~ NA_character_,
+#      prop_urchin > 0.5                     ~ "urchin_focus",
+#      prop_urchin > 0 & prop_urchin <= 0.5  ~ "other_focus",
+#      TRUE                                  ~ NA_character_
+#    )
+#  )
 
 # Summarise each bout by prey composition and centroid
 bout_summary <- forage_sf %>%
@@ -106,14 +129,16 @@ bout_summary <- forage_sf %>%
     .groups      = "drop"
   ) %>%
   mutate(
-    # Dominant-prey classification (you can adjust threshold)
+    # Revised classifier:
+    # - urchin_focus if >50% of dives are urchin AND n_urchin > 3
+    # - other_focus otherwise
     prey_focus = case_when(
-      is.na(prop_urchin) | total_dives == 0 ~ NA_character_,
-      prop_urchin > 0.5                     ~ "urchin_focus",
-      prop_urchin > 0 & prop_urchin <= 0.5  ~ "other_focus",
-      TRUE                                  ~ NA_character_
+      is.na(total_dives) | total_dives == 0 ~ NA_character_,
+      n_urchin > 2 & prop_urchin > 0.5      ~ "urchin_focus",
+      TRUE                                  ~ "other_focus"
     )
   )
+
 
 # ------------------------------------------------------------------------------
 # 5) Join bouts to polygons (patch_id, pred_patch) by spatial intersection & year
