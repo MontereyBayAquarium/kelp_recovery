@@ -17,7 +17,7 @@ librarian::shelf(
 # ------------------------------------------------------------------------------
 load(here::here("output","survey_data","processed","zone_level_data3.rda")) # quad_build3
 forage_orig     <- read_csv("/Volumes/enhydra/data/foraging_data/processed/foraging_data_2024_2025_processed.csv")
-dissection_data <- read_csv("/Volumes/enhydra/data/kelp_recovery/MBA_kelp_forest_database/processed/dissection/dissection_data_cleanedv2.csv")
+dissection_data <- read_csv("/Volumes/enhydra/data/kelp_recovery/MBA_kelp_forest_database/processed/dissection/dissection_data_recovery.csv")
 
 years_keep   <- c(2024, 2025)
 patch_colors <- c("BAR"="purple", "INCIP"="orange", "FOR"="forestgreen")
@@ -27,26 +27,21 @@ patch_colors <- c("BAR"="purple", "INCIP"="orange", "FOR"="forestgreen")
 # ------------------------------------------------------------------------------
 dissect_build1 <- dissection_data %>%
   mutate(
-    species = str_to_lower(str_trim(species)),
-    species = case_when(
-      str_detect(species, "red") ~ "red_urchin",
-      str_detect(species, "pur") ~ "purple_urchin",
-      TRUE ~ species
-    ),
-    year = year(date_collected)
+    year = year(survey_date)
   ) %>%
-  group_by(year, site_number, site_type, zone, species) %>%
+  group_by(year, site_official, site_type_official, zone, species) %>%
   summarise(
-    mean_gonad_mass_g = mean(gonad_mass_g, na.rm = TRUE),
+    #mean_gonad_mass_g = mean(gonad_mass_g, na.rm = TRUE),
     mean_gonad_index  = mean(gonad_index,  na.rm = TRUE),
+    sd_gonad_index = sd(gonad_index,  na.rm = TRUE),
     n = n(),
     .groups = "drop"
   ) %>%
   pivot_wider(
     names_from  = species,
-    values_from = c(mean_gonad_mass_g, mean_gonad_index, n),
+    values_from = c(sd_gonad_index, mean_gonad_index, n),
     names_sep   = "_"
-  )
+  ) %>% select(-mean_gonad_index_red_urchin, -n_red_urchin, -sd_gonad_index_red_urchin)
 
 quad_build4 <- quad_build3 %>%
   mutate(year = lubridate::year(survey_date)) %>%
