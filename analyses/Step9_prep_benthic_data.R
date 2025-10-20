@@ -111,11 +111,17 @@ simulated_sizes <- urchin_zone_density %>%
 urch_dat_orig <- dissection_orig %>%
   filter(species == "purple_urchin") %>%
   filter(!(is.na(test_diameter_mm) | is.na(animal_24hr_mass_g))) %>%
-  filter(animal_24hr_mass_g < 100)
+  #drop some outliers
+  filter(animal_24hr_mass_g < 100) %>%
+  filter(!(animal_24hr_mass_g >20 & test_diameter_mm <30)) %>%
+  filter(!(animal_24hr_mass_g >38 & test_diameter_mm <40)) %>%
+  filter(!(animal_24hr_mass_g <20 & test_diameter_mm > 45))
+  
 
 # derive parameters
 #take a look
 plot(urch_dat_orig$test_diameter_mm, urch_dat_orig$animal_24hr_mass_g)
+
 
 # Initial estimates based on data
 a_init <- -20
@@ -219,27 +225,10 @@ simulated_biomass <- simulated_sizes %>%
   unnest(simulated_sizes_cm) %>%
   mutate(
     test_diameter_mm = simulated_sizes_cm * 10,  # cm → mm
-    biomass_g = -10.76 + 6.12 * exp(0.04 * test_diameter_mm),
+    biomass_g = -14.2 + 7.44 * exp(0.04 * test_diameter_mm),
     biomass_g = if_else(biomass_g < 0.5, 0.5, biomass_g)  # floor small/negative values
   )
 
-
-#glance
-
-ggplot(simulated_biomass, aes(x = biomass_g, fill = site_type)) +
-  geom_histogram(bins = 40, alpha = 0.7, position = "identity") +
-  scale_x_log10() +
-  facet_grid(year ~ site, scales = "free_y") +
-  labs(
-    x = "Individual biomass (g, log10 scale)",
-    y = "Frequency",
-    title = "Distribution of simulated urchin biomass by site, site_type, and year"
-  ) +
-  theme_bw() +
-  theme(
-    legend.position = "top",
-    strip.text = element_text(size = 9)
-  )
 
 ################################################################################
 #Step 4: convert to total biomass at each site and then calculate gonad mass
@@ -276,7 +265,6 @@ biomass_gonad <- site_biomass %>%
     se_gonad_mass_g    = (sd_gi / 100) * mean_biomass_g / sqrt(n_gi)
   )
 
-library(ggplot2)
 
 ggplot(biomass_gonad, aes(x = site, y = total_gonad_mass_g, fill = site_type)) +
   geom_col(position = position_dodge(width = 0.8)) +
@@ -294,18 +282,8 @@ ggplot(biomass_gonad, aes(x = site, y = total_gonad_mass_g, fill = site_type)) +
   )
 
 
-
-
-
-
-
-
-
-
-
-
 ################################################################################
-#Step 1: Average to site, zone, site_type for each year 
+#Step 5: Average benthoc data to site, zone, site_type for each year 
 kelp_avg <- kelp_data %>%
   dplyr::select(-macro_stipe_sd_20m2) %>%
   dplyr::group_by(site, site_type, latitude, longitude, zone, survey_date) %>%
@@ -329,7 +307,12 @@ quad_zone <- dat_agg %>%
   group_by(latitude, longitude, site, site_type,
            survey_date, zone) %>%
   summarise(across(where(is.numeric), ~ mean(.x, na.rm = TRUE)),
-            .groups = "drop")
+            .groups = "drop") %>%
+  mutate(year = year(survey_date))%>%
+  #join gonad summary
+  left_join(biomass_gonad, by = c("year","site","site_type","zone"))
+
+
 
 #intermediate step: prepare site metadata table
 
@@ -341,7 +324,7 @@ site_table <- quad_zone %>%
 
 
 ################################################################################
-#Step 2: assign model-predicted patch types
+#Step 6: assign model-predicted patch types
 
 str(quad_zone)
 str(transitions_tbl_constrained)
@@ -360,6 +343,41 @@ quad_zone_with_pred <- quad_zone %>%
     )
   ) %>%
   dplyr::select(-patch_2024, -patch_2025)
+
+
+#check
+ggplot(quad_zone_with_pred %>% filter(total_gonad_mass_g < 4000), 
+       aes(x = pred_patch, y = total_gonad_mass_g, fill = pred_patch)) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.8) +
+  geom_jitter(width = 0.15, alpha = 0.4, size = 1) +
+  labs(
+    x = "Predicted patch type",
+    y = expression("Total gonad mass (g·80 m"^-2*")"),
+    title = "Total purple urchin gonad mass across patch types"
+  ) +
+  theme_bw() +
+  theme(
+    legend.position = "none",
+    axis.text.x = element_text(size = 10, face = "bold"),
+    plot.title = element_text(size = 13, face = "bold")
+  )
+
+
+ggplot(quad_zone_with_pred, aes(x = site, y = total_gonad_mass_g, fill = pred_patch)) +
+  geom_col(position = position_dodge(width = 0.8)) +
+  facet_wrap(~ year) +
+  labs(
+    x = "Site",
+    y = expression("Total gonad mass (g·80 m"^-2*")"),
+    fill = "Site type",
+    title = "Total purple urchin gonad mass by site and year"
+  ) +
+  theme_bw() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "top"
+  )
+
 
 
 ################################################################################
@@ -405,7 +423,11 @@ quad_build3 <- site_patches_with_points %>%
                 survey_date,site, site_type = site_type.y, pred_patch, 
                 everything()) %>%
   mutate(pred_patch = ifelse(is.na(pred_patch),site_type,pred_patch)) %>%
-  filter(!(is.na(pred_patch)))
+  filter(!(is.na(pred_patch))) %>%
+  select(patch_id, latitude, longitude, survey_date, year, site, site_type,
+         pred_patch, patch_cat, zone, total_biomass_g, n_biomass, sd_biomass, sd_gi, 
+         mean_gi, n_gi, mean_biomass_g, mean_gonad_mass_g, total_gonad_mass_g, 
+         se_gonad_mass_g, everything())
 
 ggplot(quad_build3) +
   geom_sf(aes(fill = pred_patch), color = "black") +
@@ -418,7 +440,7 @@ ggplot(quad_build3) +
   )
 
 
-#save(quad_build3, file = here::here("output","survey_data","processed","zone_level_data3.rda"))
+#save(quad_build3, file = here::here("output","survey_data","processed","zone_level_data4.rda"))
 
 ################################################################################
 #Step 6: prepare scan data for plot
