@@ -245,54 +245,6 @@ print(summary_stats)
 
 
 
-################################################################################
-# Boxplot: Total purple urchin biomass consumed (kg) across patch types
-
-# Basic summary (optional quick check)
-biomass_patch %>%
-  group_by(pred_patch) %>%
-  summarise(
-    mean_kg = mean(foraging_biomass_kg, na.rm = TRUE),
-    median_kg = median(foraging_biomass_kg, na.rm = TRUE),
-    sd_kg = sd(foraging_biomass_kg, na.rm = TRUE),
-    n = n()
-  )
-
-# Define patch colors (consistent with previous figures)
-patch_cols <- c("BAR"="purple", "INCIP"="orange", "FOR"="forestgreen")
-
-# Create boxplot
-p_box <- ggplot(biomass_patch %>% filter(foraging_biomass_kg <19), aes(x = pred_patch, y = foraging_biomass_kg, fill = pred_patch)) +
-  geom_boxplot(width = 0.6, outlier.shape = 21, outlier.size = 2, color = "black") +
-  scale_fill_manual(values = patch_cols, name = "Patch type") +
-  scale_y_continuous(expand = expansion(mult = c(0, 0.05))) +
-  theme_bw(base_size = 12) +
-  theme(
-    legend.position = "none",
-    panel.grid.major = element_blank(),
-    panel.grid.minor = element_blank(),
-    axis.text = element_text(color = "black"),
-    axis.title = element_text(color = "black", size = 12)
-  ) +
-  labs(
-    x = "Patch type",
-    y = "Sea otter foraging biomass (kg urchin per patch-year)",
-    title = "Total purple urchin biomass consumed by sea otters across patch types"
-  )
-
-p_box
-
-# Optional export
-# ggsave(
-#   here::here("figures", "Fig_foraging_biomass_patchtype_boxplot.png"),
-#   plot = p_box,
-#   width = 6, height = 4, dpi = 600
-# )
-
-
-
-
-
 
 
 
