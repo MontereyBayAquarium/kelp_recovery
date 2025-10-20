@@ -58,24 +58,71 @@ pur_forage <- forage_orig %>%
 
 pur_sf <- pur_forage %>%
   st_as_sf(coords = c("long", "lat"), crs = 4326, remove = FALSE)
+
 quad4_same_crs <- st_transform(quad_build3, st_crs(pur_sf))
 
-pur_patch <- st_join(
-  pur_sf,
-  quad4_same_crs %>% select(patch_id, pred_patch, survey_date),
-  join = st_intersects
-) %>%
-  mutate(year = year(survey_date)) %>%
-  filter(year %in% years_keep) %>%
-  st_drop_geometry()
+#pur_patch <- st_join(
+#  pur_sf,
+#  quad4_same_crs %>% select(patch_id, pred_patch, survey_date),
+#  join = st_intersects
+#) %>%
+#  mutate(year = year(survey_date)) %>%
+#  filter(year %in% years_keep) %>%
+#  st_drop_geometry()
+
+# Create one polygon per patch_id–year–pred_patch
+# Create a unique patch-year layer (keep geometry)
+# Ensure patch polygons are unique by patch_id and year
+
+
+
+# Ensure patch polygons have numeric survey dates
+quad4_same_crs <- quad4_same_crs %>%
+  mutate(
+    survey_year = year(survey_date),
+    survey_doy  = yday(survey_date)
+  )
+
+# Convert foraging data to sf (already done)
+pur_sf <- st_as_sf(pur_forage, coords = c("long", "lat"), crs = 4326, remove = FALSE)
+
+# Spatial join to all polygons (no year filtering yet)
+pur_spatial <- st_join(pur_sf, quad4_same_crs %>%
+                         select(patch_id, pred_patch, survey_date, survey_year, survey_doy),
+                       join = st_intersects,
+                       left = TRUE)
+
+# Compute difference in days between foraging date and survey date
+pur_patch <- pur_spatial %>%
+  mutate(
+    forag_doy = yday(date),
+    diff_days = abs(forag_doy - survey_doy)
+  ) %>%
+  group_by(foragdata_id) %>%
+  slice_min(diff_days, with_ties = FALSE) %>%  # keep nearest-in-time match
+  ungroup() %>%
+  st_drop_geometry() %>%
+  filter(survey_year %in% years_keep)
+
 
 ################################################################################
 #Aggregate biomass per patch-year (absolute kg)
 
+#biomass_patch <- pur_patch %>%
+#  group_by(year, patch_id, pred_patch) %>%
+#  summarise(total_biomass_g = sum(total_biomass_g, na.rm = TRUE), .groups = "drop") %>%
+#  mutate(foraging_biomass_kg = total_biomass_g / 1000)  # convert to kg
+
+# Aggregate biomass per patch-year
 biomass_patch <- pur_patch %>%
-  group_by(year, patch_id, pred_patch) %>%
-  summarise(total_biomass_g = sum(total_biomass_g, na.rm = TRUE), .groups = "drop") %>%
-  mutate(foraging_biomass_kg = total_biomass_g / 1000)  # convert to kg
+  group_by(survey_year, patch_id, pred_patch) %>%
+  summarise(
+    total_biomass_g = sum(total_biomass_g, na.rm = TRUE),
+    n_foraging_obs = n(),
+    .groups = "drop"
+  ) %>%
+  mutate(foraging_biomass_kg = total_biomass_g / 1000) %>%
+  rename(year = survey_year) 
 
 ################################################################################
 #Add benthic patch-level predictors
@@ -195,3 +242,58 @@ print(summary_stats)
    pdp_grid,
    width = 9, height = 4, dpi = 600
  )
+
+
+
+################################################################################
+# Boxplot: Total purple urchin biomass consumed (kg) across patch types
+
+# Basic summary (optional quick check)
+biomass_patch %>%
+  group_by(pred_patch) %>%
+  summarise(
+    mean_kg = mean(foraging_biomass_kg, na.rm = TRUE),
+    median_kg = median(foraging_biomass_kg, na.rm = TRUE),
+    sd_kg = sd(foraging_biomass_kg, na.rm = TRUE),
+    n = n()
+  )
+
+# Define patch colors (consistent with previous figures)
+patch_cols <- c("BAR"="purple", "INCIP"="orange", "FOR"="forestgreen")
+
+# Create boxplot
+p_box <- ggplot(biomass_patch %>% filter(foraging_biomass_kg <19), aes(x = pred_patch, y = foraging_biomass_kg, fill = pred_patch)) +
+  geom_boxplot(width = 0.6, outlier.shape = 21, outlier.size = 2, color = "black") +
+  scale_fill_manual(values = patch_cols, name = "Patch type") +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.05))) +
+  theme_bw(base_size = 12) +
+  theme(
+    legend.position = "none",
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.text = element_text(color = "black"),
+    axis.title = element_text(color = "black", size = 12)
+  ) +
+  labs(
+    x = "Patch type",
+    y = "Sea otter foraging biomass (kg urchin per patch-year)",
+    title = "Total purple urchin biomass consumed by sea otters across patch types"
+  )
+
+p_box
+
+# Optional export
+# ggsave(
+#   here::here("figures", "Fig_foraging_biomass_patchtype_boxplot.png"),
+#   plot = p_box,
+#   width = 6, height = 4, dpi = 600
+# )
+
+
+
+
+
+
+
+
+
