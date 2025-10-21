@@ -40,6 +40,15 @@ size_key <- expand_grid(size = 1:4, qualifier = c("a","b","c")) %>%
 
 # Filter for purple urchin prey, focal months, convert to biomass
 pur_forage <- forage_orig %>%
+  # --- Identify focal bouts first --------------------------------------------
+group_by(bout) %>%
+  mutate(
+    dives_for_pur = n_distinct(foragdiv_id[str_detect(prey, regex("^pur$", ignore_case = TRUE))]),
+    focal_bout = ifelse(dives_for_pur > 5, "yes","no")
+  ) %>%
+  ungroup() %>%
+  # optional focal bout bilter
+ # filter(focal_bout == "yes")%>%
   filter(
     month %in% focal_months,
     str_detect(prey, regex("^pur$", ignore_case = TRUE))
@@ -237,11 +246,11 @@ print(summary_stats)
 ################################################################################
 #Export figure
 
- ggsave(
-   here::here("figures","Fig3_foraging_patchtype_rf_absolute_smooth.png"),
-   pdp_grid,
-   width = 9, height = 4, dpi = 600
- )
+# ggsave(
+#   here::here("figures","Fig3_foraging_patchtype_rf_absolute_smooth.png"),
+#   pdp_grid,
+#   width = 9, height = 4, dpi = 600
+# )
 
 
 
