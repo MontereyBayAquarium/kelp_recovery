@@ -591,7 +591,8 @@ combined_final <- (g1 | bottom_row_core) +
 combined_final
 
 
-
+################################################################################
+#Export
 ggsave(
   here::here("figures","Fig3_incipient_features.png"),
   combined_final,
