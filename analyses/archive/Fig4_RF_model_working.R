@@ -15,7 +15,8 @@ librarian::shelf(
 )
 
 datdir <- here::here("output")
-load(here::here("output", "survey_data", "processed", "zone_level_data3.rda"))
+#load(here::here("output", "survey_data", "processed", "zone_level_data3.rda"))
+load(here::here("output", "survey_data", "processed", "zone_level_data4.rda"))
 scan_orig <- read_csv(file.path(here::here("output","scans","scans_data.csv")))
 dissection_data <- read_csv("/Volumes/enhydra/data/kelp_recovery/MBA_kelp_forest_database/processed/dissection/dissection_data_cleanedv2.csv")
 
@@ -250,6 +251,81 @@ g2 <- ggplot(
 
 
 gridExtra::grid.arrange(g1, g2, heights = c(0.42, 0.58))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+library(dplyr)
+library(ggplot2)
+
+# -------------------------------------------------------------------
+# Clean up patch and behavior columns
+# -------------------------------------------------------------------
+pts_behav <- pts_joined %>%
+  st_drop_geometry() %>%
+  mutate(
+    pred_patch = case_when(
+      str_detect(tolower(pred_patch), "bar")   ~ "Barren",
+      str_detect(tolower(pred_patch), "incip") ~ "Incipient",
+      str_detect(tolower(pred_patch), "for")   ~ "Forest",
+      TRUE ~ NA_character_
+    ),
+    pred_patch = factor(pred_patch, levels = c("Barren", "Incipient", "Forest")),
+    behav = str_to_title(str_trim(behav))
+  ) %>%
+  filter(!is.na(pred_patch), !is.na(behav))
+
+# -------------------------------------------------------------------
+# Calculate proportions per patch type
+# -------------------------------------------------------------------
+behavior_summary <- pts_behav %>%
+  count(pred_patch, behav) %>%
+  group_by(pred_patch) %>%
+  mutate(prop = n / sum(n))
+
+# -------------------------------------------------------------------
+# Define a custom palette for all observed behaviors
+# (add or modify colors as needed)
+# -------------------------------------------------------------------
+behav_levels <- sort(unique(behavior_summary$behav))
+behavior_cols <- setNames(
+  RColorBrewer::brewer.pal(n = max(3, min(length(behav_levels), 8)), "Set2"),
+  behav_levels
+)
+
+# -------------------------------------------------------------------
+# Plot
+# -------------------------------------------------------------------
+ggplot(behavior_summary, aes(x = pred_patch, y = prop, fill = behav)) +
+  geom_col(color = "black", width = 0.7) +
+  scale_fill_manual(values = behavior_cols) +
+  labs(
+    x = "Ecosystem recovery state",
+    y = "Proportion of observed behaviors",
+    fill = "Behavior type",
+    title = "Sea otter behavioral composition across benthic patch types"
+  ) +
+  theme_bw(base_size = 13) +
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    axis.title = element_text(face = "bold"),
+    axis.text = element_text(size = 11)
+  )
+
+
+
+
+
 
 
 
