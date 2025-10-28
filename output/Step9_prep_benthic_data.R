@@ -201,22 +201,62 @@ equation_text <- substitute(italic(y) == a + b %*% e^(c * italic(x)) * "," ~ ita
 n <- nrow(urch_dat_orig)
 sample_size_text <- paste("n =", n)
 
-# Create the plot
+# create text labels
+eq_pretty <- paste0(
+  "y = ", round(a_est, 2),
+  " + ", round(b_est, 2),
+  " * exp(", round(c_est, 3), " * x)",
+  "\nR² = ", round(r_squared, 2)
+)
+
+n_label <- paste("n =", nrow(urch_dat_orig))
+
+# calculate positions
+x_pos <- min(urch_dat_orig$test_diameter_mm)
+y_top <- max(urch_dat_orig$animal_24hr_mass_g)
+
+# make plot
 g <- ggplot(urch_dat_orig, aes(x = test_diameter_mm, y = animal_24hr_mass_g)) +
   geom_point() +
-  geom_line(aes(y = a_est + b_est * exp(c_est * test_diameter_mm)), color = "purple", size = 1) +
-  labs(x = "Test Diameter (mm)", y = "Purple sea urchin biomass (g)") +
-  theme_bw() + 
+  geom_line(
+    aes(y = a_est + b_est * exp(c_est * test_diameter_mm)),
+    color = "purple",
+    linewidth = 1
+  ) +
+  labs(
+    x = "Test Diameter (mm)",
+    y = "Purple sea urchin biomass (g)"
+  ) +
+  theme_bw() +
   base_theme +
-  annotate("text", x = min(urch_dat_orig$test_diameter_mm), y = max(urch_dat_orig$animal_24hr_mass_g), 
-           label = as.expression(equation_text), hjust = 0, vjust = 1, size = 5, color = "black") +
-  annotate("text", x = min(urch_dat_orig$test_diameter_mm), y = max(urch_dat_orig$animal_24hr_mass_g) - 5, 
-           label = sample_size_text, hjust = 0, vjust = 1, size = 5, color = "black")
+  # equation at top left
+  annotate(
+    "text",
+    x = x_pos,
+    y = y_top,
+    label = eq_pretty,
+    hjust = 0,
+    vjust = 1,
+    size = 4,
+    color = "black"
+  ) +
+  # n slightly lower (adjust offset as needed)
+  annotate(
+    "text",
+    x = x_pos,
+    y = y_top - 0.1 * (y_top - min(urch_dat_orig$animal_24hr_mass_g)),
+    label = n_label,
+    hjust = 0,
+    vjust = 1,
+    size = 4,
+    color = "black"
+  )
 
 g
 
-#ggsave(g, file = file.path(figdir, "purple_urchin_td_biomass.png"), width = 6.5,
- #      height = 6.5, units = "in")
+
+ggsave(g, file = file.path(here::here("figures","SX_purple_urchin_td_biomass.png")), width = 6.5,
+       height = 6.5, units = "in")
 
 ################################################################################
 #Step 3: apply function to sampled urchin sizes to determine biomass
