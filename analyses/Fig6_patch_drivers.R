@@ -281,62 +281,168 @@ p_for_gonadm2   <- make_pdp("gonad_mass_gm2",       "FOR",   "forestgreen") # NE
 # 10. Stack PDPs for facet_grid ------------------------------------------------
 ################################################################################
 
-extract_pdp <- function(p, predictor_label, state_label) {
-  df <- p$data
-  names(df) <- c("x", "y")
-  df %>%
+
+# ---------------------------------------------------------------------------
+# Variable importance (MeanDecreaseGini) to annotate each predictor
+# ---------------------------------------------------------------------------
+var_imp <- importance(rf_multi, type = 2) %>%
+  as.data.frame() %>%
+  rownames_to_column("variable") %>%
+  rename(MeanDecreaseGini = MeanDecreaseGini)
+
+# map RF variable names -> the human-readable predictor names we used in pdp_all
+var_label_map <- tibble(
+  variable = c(
+    "behavior_ratio",
+    "mean_biomass_g",
+    "mean_gonad_mass_g",
+    "biomass_density_gm2",
+    "rel_foraging_effort"
+  ),
+  predictor = c(
+    "Behavior ratio",
+    "Mean biomass (g)",
+    "Gonad mass (g / urchin)",
+    "Biomass density (g / m²)",
+    "Relative foraging effort"
+  )
+)
+
+# join to get Gini per pretty predictor label
+var_imp_pretty <- var_imp %>%
+  inner_join(var_label_map, by = "variable") %>%
+  mutate(
+    gini_note = paste0("Gini = ", round(MeanDecreaseGini, 2))
+  ) %>%
+  select(predictor, gini_note)
+
+# ---------------------------------------------------------------------------
+# Set the predictor facet order MANUALLY the way you want:
+# behavior → urchin biomass → gonad mass → biomass density → foraging effort
+# ---------------------------------------------------------------------------
+desired_order <- c(
+  "Behavior ratio",
+  "Mean biomass (g)",
+  "Gonad mass (g / urchin)",
+  "Biomass density (g / m²)",
+  "Relative foraging effort"
+)
+
+# also set nice multiline facet labels for each predictor
+predictor_labels <- c(
+  "Behavior ratio"              = "Urchin concealment \nratio (concealed / total)",
+  "Mean biomass (g)"            = "Urchin biomass \n(g / urchin)",
+  "Gonad mass (g / urchin)"     = "Urchin gonad mass \n(g / urchin)",
+  "Biomass density (g / m²)"    = "Urchin biomass \ndensity (g / m²)",
+  "Relative foraging effort"    = "Sea otter \nforaging effort \n(proportion take in patch)"
+)
+
+# ---------------------------------------------------------------------------
+# Make sure pdp_all has the variables that match these labels
+# NOTE: we need to rebuild pdp_all with "Gonad mass (g / urchin)" instead of
+# "Gonad mass density (g / m²)" since you want gonad mass per urchin
+# in slot #3 of the order.
+# We'll regenerate pdp_all below to guarantee consistency.
+# ---------------------------------------------------------------------------
+
+extract_pdp_df <- function(var, class_label, line_col, pretty_name) {
+  pd_tmp <- partial(
+    rf_multi,
+    pred.var    = var,
+    which.class = class_label,
+    prob        = TRUE,
+    grid.resolution = 100
+  )
+  
+  # pd_tmp has columns var and yhat.
+  # Standardize to x/y plus state/predictor for stacking.
+  out <- pd_tmp %>%
+    rename(x = !!sym(var), y = yhat) %>%
     mutate(
-      state     = state_label,
-      predictor = predictor_label
+      state     = case_when(
+        class_label == "BAR"   ~ "Barren",
+        class_label == "INCIP" ~ "Incipient",
+        class_label == "FOR"   ~ "Forest",
+        TRUE ~ class_label
+      ),
+      predictor = pretty_name,
+      color     = line_col
     )
+  out
 }
 
+# Build a long df for all predictors × states in the order we care about
 pdp_all <- bind_rows(
-  # Barren
-  extract_pdp(p_bar_behavior,  "Behavior ratio",                     "Barren"),
-  extract_pdp(p_bar_biomass,   "Mean biomass (g)",                   "Barren"),
-  extract_pdp(p_bar_biomassD,  "Biomass density (g / m²)",           "Barren"),
-  extract_pdp(p_bar_foraging,  "Relative foraging effort",           "Barren"),
-  extract_pdp(p_bar_gonadm2,   "Gonad mass density (g / m²)",        "Barren"), # NEW
+  # Behavior ratio
+  extract_pdp_df("behavior_ratio",       "BAR",   patch_colors["BAR"],   "Behavior ratio"),
+  extract_pdp_df("behavior_ratio",       "INCIP", patch_colors["INCIP"], "Behavior ratio"),
+  extract_pdp_df("behavior_ratio",       "FOR",   patch_colors["FOR"],   "Behavior ratio"),
   
-  # Incipient
-  extract_pdp(p_incip_behavior,"Behavior ratio",                     "Incipient"),
-  extract_pdp(p_incip_biomass, "Mean biomass (g)",                   "Incipient"),
-  extract_pdp(p_incip_biomassD,"Biomass density (g / m²)",           "Incipient"),
-  extract_pdp(p_incip_foraging,"Relative foraging effort",           "Incipient"),
-  extract_pdp(p_incip_gonadm2, "Gonad mass density (g / m²)",        "Incipient"), # NEW
+  # Mean biomass per urchin
+  extract_pdp_df("mean_biomass_g",       "BAR",   patch_colors["BAR"],   "Mean biomass (g)"),
+  extract_pdp_df("mean_biomass_g",       "INCIP", patch_colors["INCIP"], "Mean biomass (g)"),
+  extract_pdp_df("mean_biomass_g",       "FOR",   patch_colors["FOR"],   "Mean biomass (g)"),
   
-  # Forest
-  extract_pdp(p_for_behavior,  "Behavior ratio",                     "Forest"),
-  extract_pdp(p_for_biomass,   "Mean biomass (g)",                   "Forest"),
-  extract_pdp(p_for_biomassD,  "Biomass density (g / m²)",           "Forest"),
-  extract_pdp(p_for_foraging,  "Relative foraging effort",           "Forest"),
-  extract_pdp(p_for_gonadm2,   "Gonad mass density (g / m²)",        "Forest") # NEW
+  # Gonad mass per urchin
+  extract_pdp_df("mean_gonad_mass_g",    "BAR",   patch_colors["BAR"],   "Gonad mass (g / urchin)"),
+  extract_pdp_df("mean_gonad_mass_g",    "INCIP", patch_colors["INCIP"], "Gonad mass (g / urchin)"),
+  extract_pdp_df("mean_gonad_mass_g",    "FOR",   patch_colors["FOR"],   "Gonad mass (g / urchin)"),
+  
+  # Biomass density m^-2
+  extract_pdp_df("biomass_density_gm2",  "BAR",   patch_colors["BAR"],   "Biomass density (g / m²)"),
+  extract_pdp_df("biomass_density_gm2",  "INCIP", patch_colors["INCIP"], "Biomass density (g / m²)"),
+  extract_pdp_df("biomass_density_gm2",  "FOR",   patch_colors["FOR"],   "Biomass density (g / m²)"),
+  
+  # Relative otter foraging effort
+  extract_pdp_df("rel_foraging_effort",  "BAR",   patch_colors["BAR"],   "Relative foraging effort"),
+  extract_pdp_df("rel_foraging_effort",  "INCIP", patch_colors["INCIP"], "Relative foraging effort"),
+  extract_pdp_df("rel_foraging_effort",  "FOR",   patch_colors["FOR"],   "Relative foraging effort")
 ) %>%
   drop_na(x, y)
 
-predictor_labels <- c(
-  "Behavior ratio"             = "Urchin concealment \nratio (concealed / total)",
-  "Mean biomass (g)"           = "Urchin biomass \n(g / urchin)",
-  "Biomass density (g / m²)"   = "Urchin biomass \ndensity (g / m²)",
-  "Relative foraging effort"   = "Sea otter \nforaging effort \n(proportion take in patch)",
-  "Gonad mass density (g / m²)"= "Urchin gonad mass \ndensity (g / m²)" # NEW label
-)
+# apply manual facet order
+pdp_all <- pdp_all %>%
+  mutate(
+    predictor = factor(predictor, levels = desired_order),
+    state     = factor(state, levels = c("Barren","Incipient","Forest"))
+  ) 
 
-ggplot(pdp_all, aes(x = x, y = y, color = state)) +
-  geom_line(linewidth = 1) +
+# prep panel-wise Gini notes, in that same order
+note_labels <- var_imp_pretty %>%
+  filter(predictor %in% desired_order) %>%
+  mutate(predictor = factor(predictor, levels = desired_order))
+
+# ---------------------------------------------------------------------------
+# Final multi-panel PDP plot
+# ---------------------------------------------------------------------------
+
+p_final <- ggplot(pdp_all, aes(x = x, y = y, color = state)) +
+  geom_line(linewidth = 1.5) +
   facet_wrap(
     ~ predictor,
     labeller = labeller(predictor = predictor_labels),
-    scales = "free",
+    scales   = "free",
     strip.position = "bottom",
-    nrow=1
+    nrow = 1
   ) +
-  scale_color_manual(values = c(
-    "Barren"    = "purple",
-    "Incipient" = "orange",
-    "Forest"    = "forestgreen"
-  )) +
+  # add MeanDecreaseGini text to each facet, upper right
+  geom_text(
+    data = note_labels,
+    aes(x = Inf, y = Inf, label = gini_note),
+    hjust = 1.05, vjust = 1.5,
+    size = 2.8,
+    color = "gray20",
+    inherit.aes = FALSE
+  ) +
+  scale_color_manual(
+    values = c(
+      "Barren"    = unname(patch_colors["BAR"]),
+      "Incipient" = unname(patch_colors["INCIP"]),
+      "Forest"    = unname(patch_colors["FOR"])
+    ),
+    breaks = c("Barren","Incipient","Forest"),
+    name   = "Patch state"
+  )+
   labs(
     y = "Probability",
     x = NULL
@@ -345,11 +451,13 @@ ggplot(pdp_all, aes(x = x, y = y, color = state)) +
   theme(
     strip.background   = element_blank(),
     strip.placement    = "outside",
-    strip.text.x       = element_text(size = 10, face = "plain"),
+    strip.text.x       = element_text(size = 10),
     axis.text          = element_text(size = 8),
     axis.title.y       = element_text(size = 10),
-    legend.position    = "none",
+    legend.position    = "right",
     panel.spacing      = unit(1, "lines"),
     axis.title.x       = element_blank()
-  )
+  ) 
 
+# Show it
+p_final
