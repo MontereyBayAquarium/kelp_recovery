@@ -5,11 +5,6 @@
 # Model:
 #   Random Forest classifier of patch state (BAR / INCIP / FOR)
 #
-# Outputs:
-#   1. Variable importance (which predictors matter most overall)
-#   2. Per-state importance (what best predicts INCIP vs BAR vs FOR)
-#   3. Directionality (does more X increase or decrease P(INCIP)? etc.)
-#
 # Author: Joshua G. Smith — UCSC Nearshore Ecology Research Group
 ################################################################################
 
@@ -25,10 +20,8 @@ librarian::shelf(
 # 1. Load data -----------------------------------------------------------------
 ################################################################################
 
-# quad_build3 must include patch polygons + benthic survey data
 load(here::here("output", "survey_data", "processed", "zone_level_data4.rda"))
 
-# foraging observations (dives etc.)
 forage_orig <- read_csv(
   "/Volumes/enhydra/data/foraging_data/processed/foraging_data_2024_2025_processed.csv"
 )
@@ -41,7 +34,6 @@ patch_colors <- c("BAR"="purple","INCIP"="orange","FOR"="forestgreen")
 # 2. Convert purple urchin prey to biomass -------------------------------------
 ################################################################################
 
-# map size bins to estimated test diameter
 size_key <- expand_grid(size = 1:4, qualifier = c("a","b","c")) %>%
   mutate(
     size_class = paste0(size, qualifier),
@@ -52,7 +44,6 @@ size_key <- expand_grid(size = 1:4, qualifier = c("a","b","c")) %>%
     )
   )
 
-# keep purple urchin prey in focal months, estimate biomass per prey item
 pur_forage <- forage_orig %>%
   filter(
     month %in% focal_months,
@@ -62,16 +53,15 @@ pur_forage <- forage_orig %>%
   mutate(
     test_diameter_mm = size_cm * 10,
     biomass_g        = -14.2 + 7.44 * exp(0.04 * test_diameter_mm),
-    biomass_g        = if_else(biomass_g < 0.5, 0.5, biomass_g),  # floor for sanity
+    biomass_g        = if_else(biomass_g < 0.5, 0.5, biomass_g),
     total_biomass_g  = biomass_g * number
   ) %>%
-  filter(size_cm < 8) # discard impossible monsters
+  filter(size_cm < 8) # discard impossible monsters >8 cm
 
 ################################################################################
 # 3. Match foraging records to habitat patches ---------------------------------
 ################################################################################
 
-# foraging locations as sf
 pur_sf <- st_as_sf(
   pur_forage,
   coords = c("long","lat"),
@@ -79,14 +69,12 @@ pur_sf <- st_as_sf(
   remove = FALSE
 )
 
-# survey polygons in same CRS, with survey metadata
 quad_same_crs <- st_transform(quad_build3, st_crs(pur_sf)) %>%
   mutate(
     survey_year = year(survey_date),
     survey_doy  = yday(survey_date)
   )
 
-# spatial join (which patch did the otter forage in?)
 pur_spatial <- st_join(
   pur_sf,
   quad_same_crs %>%
@@ -95,112 +83,116 @@ pur_spatial <- st_join(
   left = TRUE
 )
 
-# match each dive/bout to the *closest-in-time* survey of that patch
 pur_patch <- pur_spatial %>%
   mutate(
     forag_doy = yday(date),
     diff_days = abs(forag_doy - survey_doy)
   ) %>%
   group_by(foragdata_id) %>%
-  slice_min(diff_days, with_ties = FALSE) %>%   # best temporal match
+  slice_min(diff_days, with_ties = FALSE) %>%
   ungroup() %>%
   st_drop_geometry() %>%
   filter(survey_year %in% years_keep)
 
 ################################################################################
-# 4. Summarize to patch-year and compute *relative* otter foraging effort -------
+# 4. Summarize to patch-year and compute foraging metrics ----------------------
 ################################################################################
 
-# collapse to patch_id × year × patch_type
-# - total purple urchin biomass consumed
-# - how "important" this patch was to otter foraging that year
 biomass_patch <- pur_patch %>%
   group_by(survey_year, patch_id, pred_patch) %>%
   summarise(
     total_biomass_g = sum(total_biomass_g, na.rm = TRUE),
-    n_foraging_obs  = n(),  # how many feeding obs in that patch-year
+    n_foraging_obs  = n(),
     .groups = "drop"
   ) %>%
   mutate(
     foraging_biomass_kg = total_biomass_g / 1000,
+    biomass_density_gm2 = total_biomass_g / 80,
     year                = survey_year
   ) %>%
   group_by(year) %>%
   mutate(
-    rel_foraging_effort =
-      foraging_biomass_kg / sum(foraging_biomass_kg, na.rm = TRUE)
+    rel_foraging_effort = foraging_biomass_kg / sum(foraging_biomass_kg, na.rm = TRUE)
   ) %>%
   ungroup()
 
-# rel_foraging_effort ~ "how much of all otter urchin take this year
-# happened in this specific patch?"
-# High value = otters are targeting this patch heavily (selection pressure).
-
 ################################################################################
-# 5. Join with habitat / prey / behavior / physical attributes -----------------
+# 5. Join with habitat / prey / physical attributes ----------------------------
 ################################################################################
 
-# predictors of interest (benthic survey level)
 predictors_focus <- c(
-  "mean_gonad_mass_g",          # gonad mass per urchin (food quality)
-  "mean_biomass_g",             # urchin biomass per individual (size/condition)
-  "purple_urchin_densitym2",    # prey availability
-  "purple_urchin_conceiledm2",  # refuge-seeking behavior
-  "relief_cm",                  # rugosity / structure
-  "risk_index"                  # physical risk / exposure
+  "mean_gonad_mass_g",
+  "total_gonad_mass_g",         # for gonad mass per m2
+  "mean_biomass_g",
+  "purple_urchin_densitym2",
+  "purple_urchin_conceiledm2",
+  "relief_cm",
+  "risk_index"
 )
 
 patch_predictors <- quad_same_crs %>%
   mutate(year = year(survey_date)) %>%
   st_drop_geometry() %>%
   group_by(patch_id, year, pred_patch) %>%
-  summarise(
-    across(all_of(predictors_focus), ~ mean(.x, na.rm = TRUE)),
-    .groups = "drop"
-  )
+  summarise(across(all_of(predictors_focus), ~ mean(.x, na.rm = TRUE)),
+            .groups = "drop") %>%
+  mutate(gonad_mass_gm2 = total_gonad_mass_g / 80)   # NEW predictor
 
-# merge foraging summary with benthic predictors
-model_data <- biomass_patch %>%
+biomass_patch_full <- patch_predictors %>%
+  select(patch_id, year, pred_patch) %>%
+  distinct() %>%
   left_join(
-    patch_predictors,
-    by = c("patch_id","year","pred_patch")
+    biomass_patch %>%
+      select(patch_id, year, rel_foraging_effort, biomass_density_gm2),
+    by = c("patch_id", "year")
   ) %>%
   mutate(
-    pred_patch = factor(pred_patch, levels = c("BAR","INCIP","FOR")),
+    rel_foraging_effort  = replace_na(rel_foraging_effort, 0),
+    biomass_density_gm2  = replace_na(biomass_density_gm2, 0)
+  )
+
+model_data <- biomass_patch_full %>%
+  left_join(patch_predictors,
+            by = c("patch_id", "year", "pred_patch")) %>%
+  mutate(
+    pred_patch = factor(pred_patch, levels = c("BAR", "INCIP", "FOR")),
     behavior_ratio = purple_urchin_conceiledm2 / purple_urchin_densitym2
   ) %>%
   filter(
-    !is.na(rel_foraging_effort),
     !is.na(mean_gonad_mass_g),
     !is.na(mean_biomass_g),
+    !is.na(gonad_mass_gm2),
     !is.na(purple_urchin_densitym2),
     !is.na(purple_urchin_conceiledm2),
     !is.na(relief_cm),
     !is.na(risk_index),
-    is.finite(behavior_ratio) # excludes div-by-zero weirdness
+    is.finite(behavior_ratio)
   )
 
-# rf_dat is now "one row per patch-year" with all predictors + class label
+################################################################################
+# 6. Fit multiclass Random Forest ----------------------------------------------
+################################################################################
+
 rf_dat <- model_data %>%
   select(
     pred_patch,
     rel_foraging_effort,
     mean_biomass_g,
     mean_gonad_mass_g,
+    gonad_mass_gm2,          # NEW predictor
+    biomass_density_gm2,
     behavior_ratio,
     relief_cm,
     risk_index
   )
-
-################################################################################
-# 6. Fit a single multiclass Random Forest -------------------------------------
-################################################################################
 
 set.seed(42)
 rf_multi <- randomForest(
   pred_patch ~ rel_foraging_effort +
     mean_biomass_g +
     mean_gonad_mass_g +
+    gonad_mass_gm2 +          # NEW predictor
+    biomass_density_gm2 +
     behavior_ratio +
     relief_cm +
     risk_index,
@@ -213,85 +205,20 @@ rf_multi <- randomForest(
 
 print(rf_multi)
 
-# Notes:
-# - rf_multi$confusion gives class-by-class accuracy (BAR vs INCIP vs FOR)
-# - rf_multi$votes gives predicted probability for each class
-
 ################################################################################
-# 7. Variable importance (overall and per-state) ------------------------------
+# 7. Variable importance (overall and per-state) -------------------------------
 ################################################################################
 
-# Overall permutation importance (MeanDecreaseAccuracy)
 varImpPlot(
   rf_multi,
   type = 1,
   main = "Predictors of Patch State (overall importance)"
 )
 
-# Publication-style variable importance per class (BAR, INCIP, FOR)
-# vip::vip(..., target="INCIP") asks:
-#   "Which predictors most affect P(pred_patch == INCIP) ?"
-vip_incip <- vip(
-  rf_multi,
-  target = "INCIP",
-  geom = "col",
-  aesthetics = list(fill = "orange", alpha = 0.8)
-) +
-  labs(
-    title    = "Predictors of Incipient Forest",
-    subtitle = "Permutation importance on P(incipient)",
-    x = "Importance",
-    y = NULL
-  ) +
-  theme_bw(base_size = 11) +
-  theme(panel.grid = element_blank())
-
-vip_bar <- vip(
-  rf_multi,
-  target = "BAR",
-  geom = "col",
-  aesthetics = list(fill = "purple", alpha = 0.8)
-) +
-  labs(
-    title    = "Predictors of Barren",
-    subtitle = "Permutation importance on P(barren)",
-    x = "Importance",
-    y = NULL
-  ) +
-  theme_bw(base_size = 11) +
-  theme(panel.grid = element_blank())
-
-vip_for <- vip(
-  rf_multi,
-  target = "FOR",
-  geom = "col",
-  aesthetics = list(fill = "forestgreen", alpha = 0.8)
-) +
-  labs(
-    title    = "Predictors of Forest",
-    subtitle = "Permutation importance on P(forest)",
-    x = "Importance",
-    y = NULL
-  ) +
-  theme_bw(base_size = 11) +
-  theme(panel.grid = element_blank())
-
-# You can view them individually:
-# print(vip_incip); print(vip_bar); print(vip_for)
-
-# Or combine in a 1x3 panel:
-vip_panel <- vip_bar + vip_incip + vip_for +
-  plot_layout(ncol = 3)
-
-print(vip_panel)
-
 ################################################################################
-# 8. Directionality via partial dependence ------------------------------------
+# 8. Partial dependence helper -------------------------------------------------
 ################################################################################
-# PDP tells you:
-#  as predictor X increases, does P(class=k) go up or down?
 
-# helper to generate PDP for one predictor/one class
 make_pdp <- function(var, class_label, line_col) {
   pd <- partial(
     rf_multi,
@@ -302,116 +229,127 @@ make_pdp <- function(var, class_label, line_col) {
   )
   
   pretty_x <- c(
-    rel_foraging_effort = "Relative otter urchin foraging effort\n(proportion of annual take)",
-    mean_biomass_g      = "Urchin biomass (g / urchin)",
-    mean_gonad_mass_g   = "Urchin gonad mass (g)",
-    behavior_ratio      = "Urchin concealment ratio\n(concealed / total)",
-    relief_cm           = "Reef relief (cm)",
-    risk_index          = "Risk index"
+    behavior_ratio        = "Urchin concealment ratio\n(concealed / total)",
+    mean_biomass_g        = "Urchin biomass (g / urchin)",
+    biomass_density_gm2   = "Urchin biomass density (g / m²)",
+    rel_foraging_effort   = "Relative otter urchin foraging effort\n(proportion of annual take)",
+    mean_gonad_mass_g     = "Urchin gonad mass (g)",
+    gonad_mass_gm2        = "Gonad mass density (g / m²)",   # NEW label
+    relief_cm             = "Reef relief (cm)",
+    risk_index            = "Risk index"
   )
   
   ggplot(pd, aes_string(x = var, y = "yhat")) +
     geom_line(linewidth = 1.2, color = line_col) +
     labs(
       x = pretty_x[[var]],
-      y = paste0("P(", class_label, ")"),
-      title = paste0(class_label, ": effect of ", var)
+      y = paste0("P(", class_label, ")")
     ) +
     theme_bw(base_size = 11) +
     theme(
       panel.grid = element_blank(),
-      axis.text  = element_text(color = "black"),
-      plot.title = element_text(face = "bold", size = 10)
+      axis.text  = element_text(color = "black")
     )
 }
 
-
 ################################################################################
-# 5. Generate PDPs for each patch type -----------------------------------------
-################################################################################
-################################################################################
-# Multi-panel PDP Figure — Directionality of Key Predictors Across Patch States
-# Clean version with "Probability" y-axis and right-side row labels
+# 9. Generate PDPs for each patch type -----------------------------------------
 ################################################################################
 
+# BAR
+p_bar_behavior  <- make_pdp("behavior_ratio",        "BAR",   "purple")
+p_bar_biomass   <- make_pdp("mean_biomass_g",       "BAR",   "purple")
+p_bar_biomassD  <- make_pdp("biomass_density_gm2",  "BAR",   "purple")
+p_bar_foraging  <- make_pdp("rel_foraging_effort",  "BAR",   "purple")
+p_bar_gonadm2   <- make_pdp("gonad_mass_gm2",       "BAR",   "purple")  # NEW PDP
+
+# INCIP
+p_incip_behavior <- make_pdp("behavior_ratio",        "INCIP", "orange")
+p_incip_biomass  <- make_pdp("mean_biomass_g",       "INCIP", "orange")
+p_incip_biomassD <- make_pdp("biomass_density_gm2",  "INCIP", "orange")
+p_incip_foraging <- make_pdp("rel_foraging_effort",  "INCIP", "orange")
+p_incip_gonadm2  <- make_pdp("gonad_mass_gm2",       "INCIP", "orange") # NEW PDP
+
+# FOR
+p_for_behavior  <- make_pdp("behavior_ratio",        "FOR",   "forestgreen")
+p_for_biomass   <- make_pdp("mean_biomass_g",       "FOR",   "forestgreen")
+p_for_biomassD  <- make_pdp("biomass_density_gm2",  "FOR",   "forestgreen")
+p_for_foraging  <- make_pdp("rel_foraging_effort",  "FOR",   "forestgreen")
+p_for_gonadm2   <- make_pdp("gonad_mass_gm2",       "FOR",   "forestgreen") # NEW PDP
+
 ################################################################################
-# Multi-panel PDP Figure — Directionality of Key Predictors Across Patch States
-# Clean, publication-style version (no titles, just axes + tags)
+# 10. Stack PDPs for facet_grid ------------------------------------------------
 ################################################################################
 
-require(patchwork)
+extract_pdp <- function(p, predictor_label, state_label) {
+  df <- p$data
+  names(df) <- c("x", "y")
+  df %>%
+    mutate(
+      state     = state_label,
+      predictor = predictor_label
+    )
+}
 
-# --- Generate PDPs for each state ---------------------------------------------
+pdp_all <- bind_rows(
+  # Barren
+  extract_pdp(p_bar_behavior,  "Behavior ratio",                     "Barren"),
+  extract_pdp(p_bar_biomass,   "Mean biomass (g)",                   "Barren"),
+  extract_pdp(p_bar_biomassD,  "Biomass density (g / m²)",           "Barren"),
+  extract_pdp(p_bar_foraging,  "Relative foraging effort",           "Barren"),
+  extract_pdp(p_bar_gonadm2,   "Gonad mass density (g / m²)",        "Barren"), # NEW
+  
+  # Incipient
+  extract_pdp(p_incip_behavior,"Behavior ratio",                     "Incipient"),
+  extract_pdp(p_incip_biomass, "Mean biomass (g)",                   "Incipient"),
+  extract_pdp(p_incip_biomassD,"Biomass density (g / m²)",           "Incipient"),
+  extract_pdp(p_incip_foraging,"Relative foraging effort",           "Incipient"),
+  extract_pdp(p_incip_gonadm2, "Gonad mass density (g / m²)",        "Incipient"), # NEW
+  
+  # Forest
+  extract_pdp(p_for_behavior,  "Behavior ratio",                     "Forest"),
+  extract_pdp(p_for_biomass,   "Mean biomass (g)",                   "Forest"),
+  extract_pdp(p_for_biomassD,  "Biomass density (g / m²)",           "Forest"),
+  extract_pdp(p_for_foraging,  "Relative foraging effort",           "Forest"),
+  extract_pdp(p_for_gonadm2,   "Gonad mass density (g / m²)",        "Forest") # NEW
+) %>%
+  drop_na(x, y)
 
-# --- Barren ---
-p_bar_behavior <- make_pdp("behavior_ratio",      "BAR", "purple") +
-  labs(title = NULL)
-p_bar_biomass  <- make_pdp("mean_biomass_g",     "BAR", "purple") +
-  labs(title = NULL)
-p_bar_foraging <- make_pdp("rel_foraging_effort","BAR", "purple") +
-  labs(title = NULL)
+predictor_labels <- c(
+  "Behavior ratio"             = "Urchin concealment \nratio (concealed / total)",
+  "Mean biomass (g)"           = "Urchin biomass \n(g / urchin)",
+  "Biomass density (g / m²)"   = "Urchin biomass \ndensity (g / m²)",
+  "Relative foraging effort"   = "Sea otter \nforaging effort \n(proportion take in patch)",
+  "Gonad mass density (g / m²)"= "Urchin gonad mass \ndensity (g / m²)" # NEW label
+)
 
-# --- Incipient ---
-p_incip_behavior <- make_pdp("behavior_ratio",      "INCIP", "orange") +
-  labs(title = NULL)
-p_incip_biomass  <- make_pdp("mean_biomass_g",     "INCIP", "orange") +
-  labs(title = NULL)
-p_incip_foraging <- make_pdp("rel_foraging_effort","INCIP", "orange") +
-  labs(title = NULL)
-
-# --- Forest ---
-p_for_behavior <- make_pdp("behavior_ratio",      "FOR", "forestgreen") +
-  labs(title = NULL)
-p_for_biomass  <- make_pdp("mean_biomass_g",     "FOR", "forestgreen") +
-  labs(title = NULL)
-p_for_foraging <- make_pdp("rel_foraging_effort","FOR", "forestgreen") +
-  labs(title = NULL)
-
-
-library(grid)
-library(patchwork)
-library(cowplot)
-
-library(grid)
-library(patchwork)
-library(cowplot)
-
-# --- Base grid with tags -----------------------------------------------------
-pdp_grid_clean <- (
-  (p_bar_behavior | p_bar_biomass | p_bar_foraging) /
-    (p_incip_behavior | p_incip_biomass | p_incip_foraging) /
-    (p_for_behavior | p_for_biomass | p_for_foraging)
-) +
-  plot_annotation(tag_levels = 'A') &
+ggplot(pdp_all, aes(x = x, y = y, color = state)) +
+  geom_line(linewidth = 1) +
+  facet_wrap(
+    ~ predictor,
+    labeller = labeller(predictor = predictor_labels),
+    scales = "free",
+    strip.position = "bottom",
+    nrow=1
+  ) +
+  scale_color_manual(values = c(
+    "Barren"    = "purple",
+    "Incipient" = "orange",
+    "Forest"    = "forestgreen"
+  )) +
+  labs(
+    y = "Probability",
+    x = NULL
+  ) +
+  theme_classic(base_size = 10) +
   theme(
-    plot.title   = element_blank(),
-    axis.title.x = element_text(size = 10),
-    axis.title.y = element_blank(),  # remove individual y labels
-    axis.text.x  = element_text(size = 8),
-    axis.text.y  = element_text(size = 8),
-    plot.margin  = unit(c(4, 4, 4, 4), "mm"),
-    panel.grid   = element_blank()
+    strip.background   = element_blank(),
+    strip.placement    = "outside",
+    strip.text.x       = element_text(size = 10, face = "plain"),
+    axis.text          = element_text(size = 8),
+    axis.title.y       = element_text(size = 10),
+    legend.position    = "none",
+    panel.spacing      = unit(1, "lines"),
+    axis.title.x       = element_blank()
   )
 
-# --- Draw figure with slightly tighter spacing -------------------------------
-pdp_grid_labeled <- ggdraw() +
-  # bring panels closer to left margin (was x = 0.045)
-  draw_plot(pdp_grid_clean, x = 0.035, y = 0, width = 0.92, height = 1) +
-  
-  # shared y-axis label, snug to tick labels
-  draw_label("Probability",
-             x = 0.022, y = 0.5,
-             angle = 90, vjust = 0.5, size = 11) +
-  
-  # right-side labels (moved up slightly and inward)
-  draw_label("Barren",
-             x = 0.952, y = 0.87,
-             angle = 270, fontface = "bold", size = 11) +
-  draw_label("Incipient",
-             x = 0.952, y = 0.54,
-             angle = 270, fontface = "bold", size = 11) +
-  draw_label("Forest",
-             x = 0.952, y = 0.21,
-             angle = 270, fontface = "bold", size = 11)
-
-print(pdp_grid_labeled)
