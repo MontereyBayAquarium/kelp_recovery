@@ -454,10 +454,22 @@ p_final <- ggplot(pdp_all, aes(x = x, y = y, color = state)) +
     strip.text.x       = element_text(size = 10),
     axis.text          = element_text(size = 8),
     axis.title.y       = element_text(size = 10),
-    legend.position    = "right",
+    legend.position    = "top",
     panel.spacing      = unit(1, "lines"),
     axis.title.x       = element_blank()
   ) 
 
 # Show it
 p_final
+
+
+
+ggsave(
+  filename = here::here("figures", "Fig6_incipient_correlates.png"),
+  plot = p_final,
+  width = 9,        # in inches
+  height = 4,        # adjust as needed
+  dpi = 600,         # high-res for publication
+ bg = "white"       # ensures white background if saving to PNG
+)
+
