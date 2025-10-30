@@ -820,15 +820,32 @@ p_final <- ggplot2::ggplot(
   )
 
 ################################################################################
-# PART C. PCA biplot of habitat structure -------------------------------------
-# Show multivariate habitat space. Patch color/shape = state:
-#   2024 uses diver call
-#   2025 uses predicted 2025 state from PART A
+# PART C. PCA biplot of habitat structure
+# Show multivariate habitat/cover space for each patch.
 #
-# We'll generate TWO plots with identical axis ranges:
-#   1) Only Barrens + Forests
-#   2) Barrens + Forests + Incipient
+# Definition of "state_final":
+#   - For 2024 points: diver-called patch state
+#   - For 2025 points: RF-predicted patch state from Part A
+#
+# We generate THREE plots with identical axis ranges:
+#   (1) Barrens + Forests only (no Incipient), NO vectors
+#   (2) Barrens + Forests + Incipient, NO vectors
+#   (3) Barrens + Forests + Incipient, WITH habitat/cover vectors
+#
+# Outputs:
+#   p_biplot_BAR_FOR_novecs
+#   p_biplot_ALL_novecs
+#   p_biplot_ALL_withvecs
 ################################################################################
+
+
+################################################################################
+# 1. Build state lookup and habitat_df for PCA
+################################################################################
+
+# truth_all: from Part A/B (diver-called states by patch_id/year)
+# pred_2025: from Part A (predicted_state_2025 for 2025 patches)
+# hab_scaled_df: from Part A (scaled habitat/cover/physical vars per patch_id-year)
 
 state_lookup_2024_for_biplot <- truth_all %>%
   dplyr::rename(state_2024call = state)
@@ -857,12 +874,18 @@ habitat_df <- hab_scaled_df %>%
       year == 2025 ~ as.character(predicted_state_2025),
       TRUE         ~ NA_character_
     ),
+    # Relevel so BAR, FOR, INCIP have stable order for shapes/legend
     state_final = factor(state_final, levels = c("BAR","FOR","INCIP"))
-    # NOTE: we re-level here so BAR, FOR, INCIP is the order for shapes below
   ) %>%
   dplyr::filter(!is.na(state_final))
 
-# PCA on scaled habitat-only predictors
+################################################################################
+# 2. Run PCA on habitat-only predictors (no urchin/gonad/foraging vars)
+################################################################################
+
+# We'll PCA the scaled habitat predictors from Part A.
+# These were already scaled/cleaned in hab_scaled_df.
+
 predictor_cols_pca <- setdiff(
   colnames(habitat_df),
   c("patch_id","site","zone","year",
@@ -873,8 +896,13 @@ pca_mat <- habitat_df %>%
   dplyr::select(dplyr::any_of(predictor_cols_pca)) %>%
   as.matrix()
 
-pca_obj <- prcomp(pca_mat, center = FALSE, scale. = FALSE)
+pca_obj <- prcomp(
+  pca_mat,
+  center = FALSE,  # already scaled in Part A
+  scale. = FALSE
+)
 
+# Scores (patch locations in PCA space)
 scores_df <- tibble::as_tibble(pca_obj$x[, 1:2, drop = FALSE]) %>%
   dplyr::rename(PC1 = PC1, PC2 = PC2) %>%
   dplyr::bind_cols(
@@ -882,20 +910,28 @@ scores_df <- tibble::as_tibble(pca_obj$x[, 1:2, drop = FALSE]) %>%
       dplyr::select(patch_id, site, zone, year, state_final)
   )
 
+# Loadings (direction of each predictor in PCA space)
 loadings_df <- tibble::as_tibble(
   pca_obj$rotation[, 1:2, drop = FALSE],
   rownames = "variable"
 ) %>%
   dplyr::rename(PC1 = PC1, PC2 = PC2) %>%
-  dplyr::mutate(vec_len = sqrt(PC1^2 + PC2^2))
+  dplyr::mutate(
+    vec_len = sqrt(PC1^2 + PC2^2)
+  )
 
-# Pick top habitat/cover gradients (exclude urchin/gonad/foraging/etc.)
+################################################################################
+# 3. Build arrow_df for habitat/cover gradients
+#    We exclude biological/process vars like urchins, gonads, biomass, foraging.
+#    Then we recode variable names to pretty labels for vectors.
+################################################################################
+
 arrow_ban_regex <- "(urchin|gonad|biomass|forag|foraging|\\bgi\\b|_gi$|mean_gi|sd_gi)"
+
 arrow_df <- loadings_df %>%
   dplyr::filter(!grepl(arrow_ban_regex, variable, ignore.case = TRUE)) %>%
   dplyr::slice_max(order_by = vec_len, n = 8, with_ties = FALSE) %>%
   dplyr::mutate(
-    # Human-readable labels for arrows
     variable_pretty = dplyr::recode(
       variable,
       "n_macro_plants_20m2"       = "Kelp density",
@@ -910,11 +946,12 @@ arrow_df <- loadings_df %>%
     )
   )
 
-# Compute scaling so arrows fit nicely in score space
+# We scale arrow vectors so they sit nicely inside the point cloud
 range_x   <- range(scores_df$PC1, na.rm = TRUE)
 range_y   <- range(scores_df$PC2, na.rm = TRUE)
 max_span  <- max(diff(range_x), diff(range_y))
 max_vec   <- max(arrow_df$vec_len)
+
 arrow_scaler <- 0.4 * max_span / max_vec
 
 arrow_df <- arrow_df %>%
@@ -925,26 +962,44 @@ arrow_df <- arrow_df %>%
     y1 = PC2 * arrow_scaler
   )
 
-# Shared axis limits for both plots so the extents match
-lims_x <- range(scores_df$PC1, na.rm = TRUE)
-lims_y <- range(scores_df$PC2, na.rm = TRUE)
+################################################################################
+# 4. Define shared axis limits with padding so nothing gets clipped
+#    We'll reuse these exact bounds for all three plots so they match in talks.
+################################################################################
 
-# We'll map both color AND shape to the patch state.
-# Use manual shapes so BAR / FOR / INCIP stay consistent even when one is dropped.
-shape_vals <- c("BAR" = 16,  # filled circle
-                "FOR" = 15,  # filled square
-                "INCIP" = 17) # filled triangle
+lims_x_raw <- range(scores_df$PC1, na.rm = TRUE)
+lims_y_raw <- range(scores_df$PC2, na.rm = TRUE)
 
-# --- Helper plotting function -------------------------------------------------
-make_biplot <- function(score_data,
-                        arrow_data,
-                        title_text,
-                        patch_colors,
-                        lims_x,
-                        lims_y) {
+pad_x <- diff(lims_x_raw) * 0.3  # 30% padding each side in x
+pad_y <- diff(lims_y_raw) * 0.3  # 30% padding each side in y
+
+lims_x_pad <- c(lims_x_raw[1] - pad_x, lims_x_raw[2] + pad_x)
+lims_y_pad <- c(lims_y_raw[1] - pad_y, lims_y_raw[2] + pad_y)
+
+# We want color AND shape to encode patch state.
+# Lock stable shapes so slides are consistent.
+shape_vals <- c(
+  "BAR"   = 16,  # filled circle
+  "FOR"   = 15,  # filled square
+  "INCIP" = 17   # filled triangle
+)
+
+################################################################################
+# 5. Helper plotting functions
+#    - make_biplot_base(): no vectors
+#    - make_biplot_arrows(): with vectors
+#
+# Both use coord_cartesian(xlim=..., ylim=...) to zoom but DO NOT drop data,
+# so ellipses and arrow labels won't get clipped.
+################################################################################
+
+make_biplot_base <- function(score_data,
+                             lims_x_pad,
+                             lims_y_pad,
+                             patch_colors) {
   
   ggplot2::ggplot() +
-    # filled ellipses (95%) per state
+    # Filled 95% ellipse per state
     ggplot2::stat_ellipse(
       data = score_data,
       ggplot2::aes(
@@ -960,7 +1015,7 @@ make_biplot <- function(score_data,
       linewidth = 0.6,
       show.legend = FALSE
     ) +
-    # ellipse outlines
+    # Ellipse outline
     ggplot2::stat_ellipse(
       data = score_data,
       ggplot2::aes(
@@ -973,7 +1028,7 @@ make_biplot <- function(score_data,
       linewidth = 0.6,
       show.legend = FALSE
     ) +
-    # points: color and shape are both patch state
+    # Patch points
     ggplot2::geom_point(
       data = score_data,
       ggplot2::aes(
@@ -985,7 +1040,90 @@ make_biplot <- function(score_data,
       size  = 3,
       alpha = 0.8
     ) +
-    # habitat/cover gradient arrows
+    ggplot2::scale_color_manual(
+      values = patch_colors,
+      breaks = c("BAR","FOR","INCIP"),
+      labels = c("Barren","Forest","Incipient"),
+      name   = "Patch state"
+    ) +
+    ggplot2::scale_fill_manual(
+      values = patch_colors,
+      breaks = c("BAR","FOR","INCIP"),
+      guide  = "none"
+    ) +
+    ggplot2::scale_shape_manual(
+      values = shape_vals,
+      breaks = c("BAR","FOR","INCIP"),
+      labels = c("Barren","Forest","Incipient"),
+      name   = "Patch state"
+    ) +
+    ggplot2::coord_cartesian(
+      xlim   = lims_x_pad,
+      ylim   = lims_y_pad,
+      expand = FALSE
+    ) +
+    ggplot2::labs(
+      x = "PC1",
+      y = "PC2"
+    ) +
+    ggplot2::theme_bw(base_size = 11) +
+    ggplot2::theme(
+      panel.grid      = ggplot2::element_blank(),
+      legend.position = "right",
+      legend.title    = ggplot2::element_text(size = 10),
+      legend.text     = ggplot2::element_text(size = 9)
+    )
+}
+
+make_biplot_arrows <- function(score_data,
+                               arrow_data,
+                               lims_x_pad,
+                               lims_y_pad,
+                               patch_colors) {
+  
+  ggplot2::ggplot() +
+    # Filled 95% ellipse per state
+    ggplot2::stat_ellipse(
+      data = score_data,
+      ggplot2::aes(
+        x = PC1,
+        y = PC2,
+        color = state_final,
+        fill  = state_final
+      ),
+      type = "norm",
+      level = 0.95,
+      geom  = "polygon",
+      alpha = 0.15,
+      linewidth = 0.6,
+      show.legend = FALSE
+    ) +
+    # Ellipse outline
+    ggplot2::stat_ellipse(
+      data = score_data,
+      ggplot2::aes(
+        x = PC1,
+        y = PC2,
+        color = state_final
+      ),
+      type = "norm",
+      level = 0.95,
+      linewidth = 0.6,
+      show.legend = FALSE
+    ) +
+    # Patch points
+    ggplot2::geom_point(
+      data = score_data,
+      ggplot2::aes(
+        x = PC1,
+        y = PC2,
+        color = state_final,
+        shape = state_final
+      ),
+      size  = 3,
+      alpha = 0.8
+    ) +
+    # Habitat/cover vectors
     ggplot2::geom_segment(
       data = arrow_data,
       ggplot2::aes(
@@ -998,7 +1136,7 @@ make_biplot <- function(score_data,
       linewidth = 0.7,
       color     = "black"
     ) +
-    # arrow labels (pretty names)
+    # Vector labels
     ggrepel::geom_label_repel(
       data = arrow_data,
       ggplot2::aes(
@@ -1028,19 +1166,15 @@ make_biplot <- function(score_data,
       name   = "Patch state"
     ) +
     ggplot2::coord_cartesian(
-      xlim = lims_x,
-      ylim = lims_y,
-      expand = TRUE
+      xlim   = lims_x_pad,
+      ylim   = lims_y_pad,
+      expand = FALSE
     ) +
     ggplot2::labs(
-      #title    = title_text,
-      #subtitle = "Ellipses = 95% habitat-state envelopes; arrows = dominant habitat/cover gradients",
       x = "PC1",
       y = "PC2"
     ) +
     ggplot2::theme_bw(base_size = 11) +
-    scale_x_continuous(expand = expansion(mult = 0.3)) +
-    scale_y_continuous(expand = expansion(mult = 0.3)) +
     ggplot2::theme(
       panel.grid      = ggplot2::element_blank(),
       legend.position = "right",
@@ -1049,58 +1183,73 @@ make_biplot <- function(score_data,
     )
 }
 
-# Subset for plot 1 (Barrens + Forests only)
+################################################################################
+# 6. Build the three final biplots
+################################################################################
+
+# Plot 1: Barrens + Forests only (no Incipient), NO vectors
 scores_BAR_FOR <- scores_df %>%
   dplyr::filter(state_final %in% c("BAR","FOR"))
 
-p_biplot_BAR_FOR <- make_biplot(
+p_biplot_BAR_FOR_novecs <- make_biplot_base(
   score_data   = scores_BAR_FOR,
-  arrow_data   = arrow_df,
- # title_text   = "Habitat structure: Barrens vs Forests",
-  patch_colors = patch_colors,
-  lims_x       = lims_x,
-  lims_y       = lims_y
+  lims_x_pad   = lims_x_pad,
+  lims_y_pad   = lims_y_pad,
+  patch_colors = patch_colors
 )
 
-# Plot 2 (all three states, including Incipient)
+# Plot 2: Barrens + Forests + Incipient, NO vectors
 scores_ALL <- scores_df %>%
   dplyr::filter(state_final %in% c("BAR","FOR","INCIP"))
 
-p_biplot_ALL <- make_biplot(
+p_biplot_ALL_novecs <- make_biplot_base(
+  score_data   = scores_ALL,
+  lims_x_pad   = lims_x_pad,
+  lims_y_pad   = lims_y_pad,
+  patch_colors = patch_colors
+)
+
+# Plot 3: Barrens + Forests + Incipient, WITH habitat/cover vectors
+p_biplot_ALL_withvecs <- make_biplot_arrows(
   score_data   = scores_ALL,
   arrow_data   = arrow_df,
-  #title_text   = "Habitat structure: Barrens, Forests, and Incipient",
-  patch_colors = patch_colors,
-  lims_x       = lims_x,
-  lims_y       = lims_y
+  lims_x_pad   = lims_x_pad,
+  lims_y_pad   = lims_y_pad,
+  patch_colors = patch_colors
 )
 
 ################################################################################
-# 8. Print / save key outputs --------------------------------------------------
+# 7. Print and save
 ################################################################################
 
-print(vip_train2024)      # habitat RF importance (Part A)
-print(vip_driver)         # ecological driver RF importance (Part B)
-print(p_final)            # PDP panel across predictors (Part B)
-print(p_biplot_BAR_FOR)   # PCA/biplot: Barrens vs Forests only
-print(p_biplot_ALL)       # PCA/biplot: Barrens, Forests, + Incipient
+print(p_biplot_BAR_FOR_novecs)
+print(p_biplot_ALL_novecs)
+print(p_biplot_ALL_withvecs)
 
-
+# Save high-res PNGs for slides / manuscript figures
 ggplot2::ggsave(
-  filename = here::here("figures", "biplot_BAR_FOR.png"),
-  plot     = p_biplot_BAR_FOR,   
-  width    = 6,                 
-  height   = 5,                
+  filename = here::here("figures", "biplot_BAR_FOR_novecs.png"),
+  plot     = p_biplot_BAR_FOR_novecs,
+  width    = 6,
+  height   = 5,
   dpi      = 600,
   bg       = "white"
 )
 
+ggplot2::ggsave(
+  filename = here::here("figures", "biplot_ALL_novecs.png"),
+  plot     = p_biplot_ALL_novecs,
+  width    = 6,
+  height   = 5,
+  dpi      = 600,
+  bg       = "white"
+)
 
 ggplot2::ggsave(
-  filename = here::here("figures", "p_biplot_ALL.png"),
-  plot     = p_biplot_ALL,   
-  width    = 6,                 
-  height   = 5,                
+  filename = here::here("figures", "biplot_ALL_withvecs.png"),
+  plot     = p_biplot_ALL_withvecs,
+  width    = 6,
+  height   = 5,
   dpi      = 600,
   bg       = "white"
 )
