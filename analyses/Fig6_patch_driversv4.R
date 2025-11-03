@@ -159,6 +159,86 @@ pred_2025 <- test_df %>%
   mutate(predicted_state_2025 = factor(test_pred_class,
                                        levels=c("BAR","INCIP","FOR")))
 
+
+################################################################################
+#    Exports patch shapes with patch_2024 and patch_2025
+
+# 5a. Diver-called per patch (patch_2024)
+patch_calls_tbl <- quad_build3 %>%
+  dplyr::mutate(
+    patch_call_clean = clean_state_label(site_type)
+  ) %>%
+  sf::st_drop_geometry() %>%
+  dplyr::group_by(patch_id, site, zone) %>%
+  dplyr::summarise(
+    patch_2024 = mode_char(patch_call_clean),
+    .groups = "drop"
+  ) %>%
+  dplyr::mutate(
+    patch_2024 = as.character(patch_2024)
+  )
+
+# 5b. Patch geometry dissolved per patch_id
+patch_geom_tbl <- quad_build3 %>%
+  dplyr::select(patch_id, site, zone, geometry) %>%
+  dplyr::group_by(patch_id, site, zone) %>%
+  dplyr::summarise(
+    geometry = sf::st_union(geometry),
+    .groups  = "drop"
+  )
+
+# 5c. Predicted 2025 state
+patch_pred2025_tbl <- pred_2025 %>%
+  dplyr::transmute(
+    patch_id,
+    patch_2025 = predicted_state_2025
+  ) %>%
+  dplyr::mutate(
+    patch_2025 = factor(patch_2025, levels = c("BAR","FOR","INCIP"))
+  )
+
+# 5d. Combine and export both spatial and tabular forms
+final_patch_sf <- patch_geom_tbl %>%
+  dplyr::left_join(
+    patch_calls_tbl,
+    by = c("patch_id","site","zone")
+  ) %>%
+  dplyr::left_join(
+    patch_pred2025_tbl,
+    by = "patch_id"
+  ) %>%
+  dplyr::mutate(
+    patch_2024 = as.character(patch_2024),
+    patch_2025 = factor(patch_2025, levels = c("BAR","FOR","INCIP"))
+  ) %>%
+  dplyr::distinct(patch_id, .keep_all = TRUE) %>%
+  sf::st_as_sf()
+
+# Non-spatial tibble (mirrors transitions_tbl_constrained)
+transitions_tbl_constrained <- final_patch_sf %>%
+  sf::st_drop_geometry() %>%
+  dplyr::mutate(
+    site_type = factor(patch_2024, levels = c("BAR","FOR","INCIP")),
+    patch_2024 = as.character(patch_2024),
+    patch_2025 = factor(patch_2025, levels = c("BAR","FOR","INCIP"))
+  ) %>%
+  dplyr::select(site, zone, site_type, patch_2024, patch_2025)
+
+# Confirm structure
+str(transitions_tbl_constrained)
+
+# Save to disk (.rda)
+save(transitions_tbl_constrained,
+   file = here::here("output","lda_patch_transitionsv3.rda"))
+
+# 5e. Write shapefile for GIS visualization
+#out_dir <- here::here("output", "gis_data", "processed", "patch_state_RFsummary_2024_2025_shp")
+#if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE)
+
+#out_path <- file.path(out_dir, "patch_state_RFsummary_2024_2025.shp")
+#sf::st_write(final_patch_sf, out_path, delete_dsn = TRUE)
+
+
 ################################################################################
 # 4. Prepare PCA Dataset -------------------------------------------------------
 ################################################################################

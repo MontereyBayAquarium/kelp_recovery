@@ -354,12 +354,13 @@ g2 <-ggplot(quad_build3 %>% filter(year(survey_date) == 2025)) +
 #g2
 
 g <- ggarrange(g1, g2, common.legend = TRUE, legend = "right")
+g
 
-ggsave(
-   here::here("figures", "Fig1_map_figure.png"),
-   g,
-   width = 7, height = 4, dpi = 600, bg = "white"
- )
+#ggsave(
+#   here::here("figures", "Fig1_map_figure.png"),
+#   g,
+#   width = 7, height = 4, dpi = 600, bg = "white"
+# )
 
 
 
