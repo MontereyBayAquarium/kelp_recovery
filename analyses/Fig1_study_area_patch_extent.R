@@ -36,7 +36,9 @@ scan_orig <- read_csv(file.path(here::here("output","scans","scans_data.csv")))
 site_patches <- st_read(here::here("output","gis_data","processed","site_patch_polygons.shp"))
 
 #load LDA-predicted patch types
-lda_patch <- load(here::here("output","lda_patch_transitionsv2.rda"))
+#lda_patch <- load(here::here("output","lda_patch_transitionsv2.rda")) #old
+lda_patch <- load(here::here("output","lda_patch_transitionsv3.rda")) #new
+
 
 # read CA state
 ca_state <- st_read("/Volumes/enhydra/data/kelp_recovery/gis_data/raw/CA_state/ca_boundary_wgs84.shp", quiet=TRUE) |> st_transform(4326)

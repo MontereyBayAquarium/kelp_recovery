@@ -1227,42 +1227,42 @@ print(p_biplot_ALL_novecs)
 print(p_biplot_ALL_withvecs)
 
 # Save high-res PNGs for slides / manuscript figures
-ggplot2::ggsave(
-  filename = here::here("figures", "biplot_BAR_FOR_novecs.png"),
-  plot     = p_biplot_BAR_FOR_novecs,
-  width    = 6,
-  height   = 5,
-  dpi      = 600,
-  bg       = "white"
-)
+#ggplot2::ggsave(
+#  filename = here::here("figures", "biplot_BAR_FOR_novecs.png"),
+#  plot     = p_biplot_BAR_FOR_novecs,
+#  width    = 6,
+#  height   = 5,
+#  dpi      = 600,
+#  bg       = "white"
+#)
 
-ggplot2::ggsave(
-  filename = here::here("figures", "biplot_ALL_novecs.png"),
-  plot     = p_biplot_ALL_novecs,
-  width    = 6,
-  height   = 5,
-  dpi      = 600,
-  bg       = "white"
-)
+#ggplot2::ggsave(
+#  filename = here::here("figures", "biplot_ALL_novecs.png"),
+#  plot     = p_biplot_ALL_novecs,
+#  width    = 6,
+#  height   = 5,
+#  dpi      = 600,
+#  bg       = "white"
+#)
 
-ggplot2::ggsave(
-  filename = here::here("figures", "biplot_ALL_withvecs.png"),
-  plot     = p_biplot_ALL_withvecs,
-  width    = 6,
-  height   = 5,
-  dpi      = 600,
-  bg       = "white"
-)
+#ggplot2::ggsave(
+#  filename = here::here("figures", "biplot_ALL_withvecs.png"),
+#  plot     = p_biplot_ALL_withvecs,
+#  width    = 6,
+#  height   = 5,
+#  dpi      = 600,
+#  bg       = "white"
+#)
 
 
-ggsave(
-  filename = here::here("figures", "Fig6_incipient_correlatesv2.png"),
-  plot = p_final,
-  width = 9,        # in inches
-  height = 4,        # adjust as needed
-  dpi = 600,         # high-res for publication
-  bg = "white"       # ensures white background if saving to PNG
-)
+#ggsave(
+#  filename = here::here("figures", "Fig6_incipient_correlatesv2.png"),
+#  plot = p_final,
+#  width = 9,        # in inches
+#  height = 4,        # adjust as needed
+#  dpi = 600,         # high-res for publication
+#  bg = "white"       # ensures white background if saving to PNG
+#)
 
 
 
