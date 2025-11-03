@@ -21,15 +21,15 @@ load(file.path(datadir, "processed/recovery/kelp_recovery_data.rda"))
 
 
 kelp_avg <- kelp_data %>%
-  select(-macro_stipe_sd_20m2) %>%
+  dplyr::select(-macro_stipe_sd_20m2) %>%
   group_by(site, site_type, latitude, longitude, zone, survey_date) %>%
   summarise(across(where(is.numeric), mean, na.rm = TRUE), .groups = "drop") %>%
-  select(-transect)
+  dplyr::select(-transect)
 
 quad_avg <- quad_data %>%
   group_by(site, site_type, latitude, longitude, zone, survey_date) %>%
   summarise(across(where(is.numeric), mean, na.rm = TRUE), .groups = "drop") %>%
-  select(-quadrat, -transect)
+  dplyr::select(-quadrat, -transect)
 
 dat_agg <- inner_join(
   kelp_avg, quad_avg,
@@ -43,33 +43,33 @@ dat_agg <- inner_join(
 id_cols <- c("site","site_type","latitude","longitude","zone","survey_date",
              "transect","quadrat")
 
-num_cols <- dat_agg %>% select(where(is.numeric)) %>% names()
+num_cols <- dat_agg %>% dplyr::select(where(is.numeric)) %>% names()
 exclude_numeric <- c("latitude","longitude")
 predictor_pool <- setdiff(num_cols, exclude_numeric)
 
 base_2024 <- dat_agg %>%
   filter(year(survey_date) == 2024) %>%
   mutate(across(all_of(predictor_pool), ~ replace_na(., 0))) %>%
-  select(site, zone, site_type, survey_date, all_of(predictor_pool)) %>%
+  dplyr::select(site, zone, site_type, survey_date, all_of(predictor_pool)) %>%
   mutate(site_type = factor(site_type))
 
 base_2025 <- dat_agg %>%
   filter(year(survey_date) == 2025) %>%
   mutate(across(all_of(predictor_pool), ~ replace_na(., 0))) %>%
-  select(site, zone, site_type, survey_date, all_of(predictor_pool)) %>%
+  dplyr::select(site, zone, site_type, survey_date, all_of(predictor_pool)) %>%
   mutate(site_type = factor(site_type, levels = levels(base_2024$site_type)))
 
 cls <- levels(base_2024$site_type)
 
 # Remove zero-variance predictors
-nzv_cols <- caret::nearZeroVar(base_2024 %>% select(all_of(predictor_pool)), saveMetrics = TRUE)
+nzv_cols <- caret::nearZeroVar(base_2024 %>% dplyr::select(all_of(predictor_pool)), saveMetrics = TRUE)
 predictor_cols <- rownames(nzv_cols)[!nzv_cols$zeroVar & !nzv_cols$nzv]
 
 ################################################################################
 #Fit LDA and Random Forest models 
 
 #Train LDA on 2024 data
-x_train <- base_2024 %>% select(all_of(predictor_cols))
+x_train <- base_2024 %>% dplyr::select(all_of(predictor_cols))
 y_train <- droplevels(base_2024$site_type)
 
 set.seed(1985)
@@ -102,7 +102,7 @@ rf_imp_tbl <- tibble(feature = names(rf_imp), importance = rf_imp)
 ################################################################################
 #Predict 2025 patch type probabilities
 
-x_test <- base_2025 %>% select(all_of(colnames(x_train)))
+x_test <- base_2025 %>% dplyr::select(all_of(colnames(x_train)))
 
 lda_post_2025 <- as_tibble(predict(lda_fit, newdata = x_test)$posterior)
 rf_prob_2025  <- as_tibble(predict(rf_fit, data.frame(x_test))$predictions)
@@ -118,7 +118,7 @@ ens_prob_2025 <- (lda_post_2025 + rf_prob_2025) / 2
 #Build patch transition table 
 
 prob_2025_lng <- bind_cols(
-  base_2025 %>% select(site, zone, site_type),
+  base_2025 %>% dplyr::select(site, zone, site_type),
   ens_prob_2025
 )
 
@@ -150,7 +150,7 @@ pred_2025_by_szst_constrained <- pred_2024_by_szst %>%
   ) %>%
   ungroup() %>%
   mutate(patch_2025 = factor(patch_2025, levels = cls)) %>%
-  select(site, zone, site_type, patch_2024, patch_2025)
+  dplyr::select(site, zone, site_type, patch_2024, patch_2025)
 
 transitions_tbl_constrained <- pred_2025_by_szst_constrained
 #save(transitions_tbl_constrained, file = here::here("output","lda_patch_transitionsv2.rda"))
@@ -190,7 +190,7 @@ rf_pred_labels <- colnames(rf_pred_mat)[max.col(rf_pred_mat, ties.method = "firs
 # Add predictions to a new data frame for the surrogate tree
 surro_df <- base_2024 %>%
   mutate(pred = rf_pred_labels) %>%
-  select(all_of(predictor_cols), pred)
+  dplyr::select(all_of(predictor_cols), pred)
 
 
 surro_tree <- rpart::rpart(as.factor(pred) ~ ., data = surro_df,
@@ -203,7 +203,7 @@ capture.output(rules_txt, file = here::here("output","incipient_rules.txt"))
 top_incip_feats <- head(summ_inc$feature, 6)
 pdp_list <- lapply(top_incip_feats, function(v) {
   pdp::partial(rf_fit, pred.var = v,
-               train = base_2024 %>% select(all_of(predictor_cols)),
+               train = base_2024 %>% dplyr::select(all_of(predictor_cols)),
                which.class = incip_label, prob = TRUE)
 })
 
@@ -465,11 +465,11 @@ final_fig
 
 
 
-ggsave(
-  here::here("figures", "Fig2_patch_features_with_boxplots.png"),
-  final_fig,
-  width = 9, height = 9, dpi = 600
-)
+#ggsave(
+#  here::here("figures", "Fig2_patch_features_with_boxplots.png"),
+#  final_fig,
+#  width = 9, height = 9, dpi = 600
+#)
 
 
 
