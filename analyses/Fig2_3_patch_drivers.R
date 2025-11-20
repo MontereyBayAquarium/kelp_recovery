@@ -599,11 +599,38 @@ final_patch_sf <- patch_geom_tbl %>%
   ) %>%
   sf::st_as_sf()
 
-# 5e. (optional) Write shapefile to disk
-out_dir <- here::here("output", "gis_data","processed","patch_state_RFsummary_2024_2025_shp")
-if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE)
+transitions_tbl_constrained <- final_patch_sf %>%
+  sf::st_drop_geometry() %>%
+  dplyr::mutate(
+    # site_type is the diver-called 2024 patch state
+    site_type = factor(
+      as.character(patch_2024),
+      levels = c("BAR","FOR","INCIP")
+    ),
+    # patch_2024 stored as *character* (not factor)
+    patch_2024 = as.character(patch_2024),
+    # patch_2025 stored as factor with same levels/order
+    patch_2025 = factor(
+      as.character(patch_2025),
+      levels = c("BAR","FOR","INCIP")
+    )
+  ) %>%
+  dplyr::select(site, zone, site_type, patch_2024, patch_2025)
 
-out_path <- file.path(out_dir, "patch_state_RFsummary_2024_2025.shp")
+# sanity check
+str(transitions_tbl_constrained)
+
+# save in the same way as before
+#save(
+#  transitions_tbl_constrained,
+#  file = here::here("output", "lda_patch_transitionsv5.rda")
+#)
+
+# 5e. (optional) Write shapefile to disk
+#out_dir <- here::here("output", "gis_data","processed","patch_state_RFsummary_2024_2025_shp")
+#if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE)
+
+#out_path <- file.path(out_dir, "patch_state_RFsummary_2024_2025.shp")
 
 # sf::st_write(
 #   obj          = final_patch_sf,

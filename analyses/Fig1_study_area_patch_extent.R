@@ -37,7 +37,7 @@ site_patches <- st_read(here::here("output","gis_data","processed","site_patch_p
 
 #load LDA-predicted patch types
 #lda_patch <- load(here::here("output","lda_patch_transitionsv2.rda")) #old
-lda_patch <- load(here::here("output","lda_patch_transitionsv3.rda")) #new -- unconstrained
+lda_patch <- load(here::here("output","lda_patch_transitionsv5.rda")) #new -- unconstrained
 
 
 # read CA state
