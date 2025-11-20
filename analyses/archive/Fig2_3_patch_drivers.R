@@ -4,8 +4,8 @@
 #
 # PART A. Habitat-only RF
 #   Train on 2024 diver-called patch states using ONLY structure/cover/physical
-#   habitat predictors. Exclude predictors
-#   to be used in part B  (no urchin / gonad / foraging). Predict 2025 states.
+#   habitat predictors (no urchin / gonad / foraging). Exclude predictors
+#   to be used in part B. Predict 2025 states.
 #
 # PART B. Ecological driver RF (2024 + 2025)
 #   Build a unified response "state_resp" for BOTH years:
@@ -64,6 +64,24 @@ patch_colors <- c(
 # Helper functions -------------------------------------------------------------
 ################################################################################
 
+clean_state_label <- function(x) {
+  x_up <- toupper(x)
+  dplyr::case_when(
+    x_up %in% c(
+      "BAR","BARREN","BARRENS","URCHIN BARREN",
+      "BARREN PATCH","BARREN/URCHIN BARREN"
+    ) ~ "BAR",
+    x_up %in% c(
+      "INCIP","INCIPIENT","INCIPIENT FOREST",
+      "TRANSITION","TRANSITIONAL","INCIPIENT PATCH"
+    ) ~ "INCIP",
+    x_up %in% c(
+      "FOR","FOREST","FORESTED","KELP FOREST"
+    ) ~ "FOR",
+    TRUE ~ NA_character_
+  )
+}
+
 mode_char <- function(x) {
   x <- x[!is.na(x)]
   if (!length(x)) return(NA_character_)
@@ -111,12 +129,11 @@ dat_raw <- quad_build3 %>%
 
 # Diver-called patch state per patch_id/year
 truth_all <- dat_raw %>%
-  #dplyr::mutate(#site_type_clean = clean_state_label(site_type)
-   #             ) %>%  # site_type is diver-called patch state
+  dplyr::mutate(site_type_clean = clean_state_label(site_type)) %>%  # site_type is diver-called patch state
   dplyr::filter(year %in% years_keep) %>%
   dplyr::group_by(patch_id, site, zone, year) %>%
   dplyr::summarise(
-    state = mode_char(site_type),
+    state = mode_char(site_type_clean),
     .groups = "drop"
   ) %>%
   dplyr::mutate(
@@ -529,13 +546,13 @@ print(table(driver_df_all$state_resp, useNA = "ifany"))
 
 # 5a. Diver-called per patch (patch_2024)
 patch_calls_tbl <- quad_build3 %>%
-  #dplyr::mutate(
-  #  patch_call_clean = clean_state_label(site_type)
-  #) %>%
+  dplyr::mutate(
+    patch_call_clean = clean_state_label(site_type)
+  ) %>%
   sf::st_drop_geometry() %>%
   dplyr::group_by(patch_id, site, zone) %>%
   dplyr::summarise(
-    patch_2024 = mode_char(site_type),
+    patch_2024 = mode_char(patch_call_clean),
     .groups = "drop"
   ) %>%
   dplyr::mutate(
@@ -828,8 +845,6 @@ p_final <- ggplot2::ggplot(
     panel.spacing      = grid::unit(1, "lines"),
     axis.title.x       = ggplot2::element_blank()
   )
-
-p_final
 
 ################################################################################
 # PART C. PCA biplot of habitat structure
