@@ -19,10 +19,11 @@
 #     - Urchin biomass density (g / m² standing stock; total_biomass_g / 80 m²)
 #     - Sea otter foraging effort (proportion of all urchin biomass taken)
 #
-#   Outputs:
-#     - Fig 2: PCA biplot (A) + RF node impurity (B) + boxplots of key habitat
-#              structure variables (C)
-#     - Fig 3: Partial dependence curves (PDPs) for process-level drivers
+#   Output: variable importance + PDPs across predictors.
+#
+# PART C. PCA biplot of habitat structure
+#   Multivariate habitat space, colored by patch state.
+#   2024 = diver-called, 2025 = predicted from habitat RF.
 ################################################################################
 
 rm(list = ls())
@@ -113,7 +114,7 @@ truth_all <- dat_raw %>%
   dplyr::filter(year %in% years_keep) %>%
   dplyr::group_by(patch_id, site, zone, year) %>%
   dplyr::summarise(
-    state = mode_char(site_type), # site_type is diver-called patch state
+    state = mode_char(site_type), #site type is diver called patch state
     .groups = "drop"
   ) %>%
   dplyr::mutate(
@@ -229,6 +230,18 @@ cat(sprintf("\n[PART A] RF (2024 habitat classifier)\nOOB accuracy = %.3f\n", oo
 cat("[PART A] OOB confusion matrix:\n")
 print(rf_train2024$confusion)
 
+vip_train2024 <- vip::vip(
+  rf_train2024,
+  num_features = min(20, length(predictor_cols_A)),
+  bar = TRUE
+) +
+  ggplot2::theme_bw(base_size = 11) +
+  ggplot2::labs(
+    title = "Habitat / structural predictors distinguishing BAR / INCIP / FOR (2024)",
+    x     = "Predictor (scaled)",
+    y     = "Importance"
+  )
+
 # Predict 2025 patch states from habitat-only model
 test_pred_class <- predict(
   rf_train2024,
@@ -274,90 +287,6 @@ if (any(!is.na(test_df$state))) {
 } else {
   cat("\n[PART A] No 2025 diver calls to score generalization.\n")
 }
-
-
-#export patch types as tbl
-
-################################################################################
-# Patch-level transitions table for LDA (2024 diver calls → 2025 RF states)
-################################################################################
-
-# 1. Diver-called per patch (patch_2024)
-patch_calls_tbl <- quad_build3 %>%
-  sf::st_drop_geometry() %>%
-  dplyr::group_by(patch_id, site, zone) %>%
-  dplyr::summarise(
-    patch_2024 = mode_char(site_type),
-    .groups    = "drop"
-  ) %>%
-  dplyr::mutate(
-    patch_2024 = factor(patch_2024, levels = c("BAR","INCIP","FOR"))
-  )
-
-# 2. Patch geometry dissolved per patch_id
-patch_geom_tbl <- quad_build3 %>%
-  dplyr::select(patch_id, site, zone, geometry) %>%
-  dplyr::group_by(patch_id, site, zone) %>%
-  dplyr::summarise(
-    geometry = sf::st_union(geometry),
-    .groups  = "drop"
-  )
-
-# 3. Predicted 2025 state from habitat RF
-patch_pred2025_tbl <- pred_2025 %>%
-  dplyr::transmute(
-    patch_id,
-    patch_2025 = predicted_state_2025
-  ) %>%
-  dplyr::mutate(
-    patch_2025 = factor(patch_2025, levels = c("BAR","INCIP","FOR"))
-  )
-
-# 4. Join together: patch_2024 (diver) + patch_2025 (RF) + geometry
-final_patch_sf <- patch_geom_tbl %>%
-  dplyr::left_join(
-    patch_calls_tbl,
-    by = c("patch_id","site","zone")
-  ) %>%
-  dplyr::left_join(
-    patch_pred2025_tbl,
-    by = "patch_id"
-  ) %>%
-  dplyr::distinct(patch_id, .keep_all = TRUE) %>%
-  dplyr::select(
-    patch_id,
-    site,
-    zone,
-    patch_2024,
-    patch_2025,
-    geometry
-  ) %>%
-  sf::st_as_sf()
-
-# 5. LDA-friendly transitions table (no geometry)
-transitions_tbl_constrained <- final_patch_sf %>%
-  sf::st_drop_geometry() %>%
-  dplyr::mutate(
-    site_type = factor(
-      as.character(patch_2024),
-      levels = c("BAR","FOR","INCIP")
-    ),
-    patch_2024 = as.character(patch_2024),
-    patch_2025 = factor(
-      as.character(patch_2025),
-      levels = c("BAR","FOR","INCIP")
-    )
-  ) %>%
-  dplyr::select(site, zone, site_type, patch_2024, patch_2025)
-
-str(transitions_tbl_constrained)
-
-# Save
-#save(
-#  transitions_tbl_constrained,
-#  file = here::here("output", "lda_patch_transitionsv5.rda")
-#)
-
 
 ################################################################################
 # PART B. Ecological drivers of patch state 
@@ -593,8 +522,106 @@ cat("\n[PART B] Rows in driver_df_all (2024 + 2025): ", nrow(driver_df_all), "\n
 cat("[PART B] Class balance in state_resp:\n")
 print(table(driver_df_all$state_resp, useNA = "ifany"))
 
+# 5. Per-patch polygons + states (2024 diver call + 2025 predicted) -----------
+#    This is for exporting patch shapes w/ patch_2024 and patch_2025
+
+# 5a. Diver-called per patch (patch_2024)
+patch_calls_tbl <- quad_build3 %>%
+  #dplyr::mutate(
+  #  patch_call_clean = clean_state_label(site_type)
+  #) %>%
+  sf::st_drop_geometry() %>%
+  dplyr::group_by(patch_id, site, zone) %>%
+  dplyr::summarise(
+    patch_2024 = mode_char(site_type),
+    .groups = "drop"
+  ) %>%
+  dplyr::mutate(
+    patch_2024 = factor(patch_2024, levels = c("BAR","INCIP","FOR"))
+  )
+
+# 5b. Patch geometry dissolved per patch_id
+patch_geom_tbl <- quad_build3 %>%
+  dplyr::select(patch_id, site, zone, geometry) %>%
+  dplyr::group_by(patch_id, site, zone) %>%
+  dplyr::summarise(
+    geometry = sf::st_union(geometry),
+    .groups  = "drop"
+  )
+
+# 5c. Predicted 2025 state
+patch_pred2025_tbl <- pred_2025 %>%
+  dplyr::transmute(
+    patch_id,
+    patch_2025 = predicted_state_2025
+  ) %>%
+  dplyr::mutate(
+    patch_2025 = factor(patch_2025, levels = c("BAR","INCIP","FOR"))
+  )
+
+# 5d. Join together for export
+final_patch_sf <- patch_geom_tbl %>%
+  dplyr::left_join(
+    patch_calls_tbl,
+    by = c("patch_id","site","zone")
+  ) %>%
+  dplyr::left_join(
+    patch_pred2025_tbl,
+    by = "patch_id"
+  ) %>%
+  dplyr::distinct(patch_id, .keep_all = TRUE) %>%
+  dplyr::select(
+    patch_id,
+    site,
+    zone,
+    patch_2024,
+    patch_2025,
+    geometry
+  ) %>%
+  sf::st_as_sf()
+
+transitions_tbl_constrained <- final_patch_sf %>%
+  sf::st_drop_geometry() %>%
+  dplyr::mutate(
+    # site_type is the diver-called 2024 patch state
+    site_type = factor(
+      as.character(patch_2024),
+      levels = c("BAR","FOR","INCIP")
+    ),
+    # patch_2024 stored as *character* (not factor)
+    patch_2024 = as.character(patch_2024),
+    # patch_2025 stored as factor with same levels/order
+    patch_2025 = factor(
+      as.character(patch_2025),
+      levels = c("BAR","FOR","INCIP")
+    )
+  ) %>%
+  dplyr::select(site, zone, site_type, patch_2024, patch_2025)
+
+# sanity check
+str(transitions_tbl_constrained)
+
+# save in the same way as before
+#save(
+#  transitions_tbl_constrained,
+#  file = here::here("output", "lda_patch_transitionsv5.rda")
+#)
+
+# 5e. (optional) Write shapefile to disk
+#out_dir <- here::here("output", "gis_data","processed","patch_state_RFsummary_2024_2025_shp")
+#if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE)
+
+#out_path <- file.path(out_dir, "patch_state_RFsummary_2024_2025.shp")
+
+# sf::st_write(
+#   obj          = final_patch_sf,
+#   dsn          = out_path,
+#   driver       = "ESRI Shapefile",
+#   delete_layer = TRUE
+# )
+
 ################################################################################
-# Prep RF input for ecological driver model -----------------------------------
+# 6. Prep RF input for ecological driver model --------------------------------
 ################################################################################
 
 rf_driver_input <- driver_df_all %>%
@@ -659,19 +686,44 @@ rf_driver <- randomForest(
 cat("\n[PART B] Driver RF confusion matrix (trained on 2024+2025 habitat-defined states):\n")
 print(rf_driver$confusion)
 
+vip_driver <- vip::vip(
+  rf_driver,
+  num_features = min(12, length(predictor_cols_B)),
+  bar = TRUE
+) +
+  ggplot2::theme_bw(base_size = 11) +
+  ggplot2::labs(
+    title = "Process-level drivers of patch state (2024 + 2025)",
+    x     = "Predictor",
+    y     = "Importance"
+  )
+
 ################################################################################
-# Partial Dependence Curves (PDPs) — Fig 3 ------------------------------------
+# 6. Partial Dependence Curves (PDPs) ------------------------------------------
+# Custom ordering and filtering for plotting only
 ################################################################################
 
-# We keep all predictors in the RF, but only plot a selected subset.
+# 1. Full set of predictors actually used in the RF:
+#    (we keep them all in the model — including purple_urchin_densitym2 —
+#     but we won't plot density)
+all_predictors <- predictor_cols_B
+
+# 2. Subset + order JUST the variables we want to show in p_final
+#    Order requested:
+#    1) urchin biomass (g / urchin)
+#    2) urchin biomass density (g / m²)
+#    3) concealment ratio
+#    4) gonad mass (g / urchin)
+#    5) sea otter foraging effort
 pdp_plot_vars <- c(
-  "mean_biomass_g",           # 1) urchin biomass (g / urchin)
-  "urchin_biomass_densitym2", # 2) urchin biomass density (g / m²)
-  "behavior_ratio",           # 3) concealment ratio
-  "mean_gonad_mass_g",        # 4) gonad mass (g / urchin)
-  "rel_foraging_effort"       # 5) sea otter foraging effort
+  "mean_biomass_g",
+  "urchin_biomass_densitym2",
+  "behavior_ratio",
+  "mean_gonad_mass_g",
+  "rel_foraging_effort"
 )
 
+# 3. Pretty facet labels for ONLY those five
 pretty_lab_map <- c(
   "mean_biomass_g"            = "Urchin biomass\n(g / urchin)",
   "urchin_biomass_densitym2"  = "Urchin biomass density\n(g / m²)",
@@ -682,7 +734,7 @@ pretty_lab_map <- c(
 
 class_levels <- levels(rf_driver_input$state_resp)
 
-# Build long PDP data frame across predictors × states
+# 4. Build long PDP data frame across predictors × states
 pdp_all <- purrr::map_dfr(pdp_plot_vars, function(v) {
   purrr::map_dfr(class_levels, function(cls) {
     pd_tmp <- pdp::partial(
@@ -704,7 +756,7 @@ pdp_all <- purrr::map_dfr(pdp_plot_vars, function(v) {
 }) %>%
   tidyr::drop_na(x, y)
 
-# Facet order
+# 5. Make sure facet order matches pdp_plot_vars
 predictor_lab_order <- unname(pretty_lab_map[pdp_plot_vars])
 
 pdp_all <- pdp_all %>%
@@ -713,11 +765,11 @@ pdp_all <- pdp_all %>%
     state         = factor(state, levels = c("BAR","INCIP","FOR"))
   )
 
-# Variable importance notes (Gini) to annotate facets
+# 6. Pull variable importance to annotate facets (Gini from rf_driver)
 note_labels <- rf_driver$importance %>%
   as.data.frame() %>%
   tibble::rownames_to_column("variable") %>%
-  dplyr::filter(variable %in% pdp_plot_vars) %>%
+  dplyr::filter(variable %in% pdp_plot_vars) %>%             # <- only keep plotted vars
   dplyr::mutate(
     predictor_lab = pretty_lab_map[variable],
     gini_note     = paste0("Gini = ", round(MeanDecreaseGini, 2))
@@ -727,19 +779,19 @@ note_labels <- rf_driver$importance %>%
   ) %>%
   dplyr::distinct(predictor_lab, gini_note)
 
-# Fig 3: PDPs
-p_final <- ggplot(
+# 7. Final PDP figure (no purple_urchin_densitym2 panel, custom order)
+p_final <- ggplot2::ggplot(
   pdp_all,
-  aes(x = x, y = y, color = state, shape = state)
+  ggplot2::aes(x = x, y = y, color = state, shape = state)
 ) +
-  geom_line(linewidth = 1.2) +
-  facet_wrap(
+  ggplot2::geom_line(linewidth = 1.2) +
+  ggplot2::facet_wrap(
     ~ predictor_lab,
     scales         = "free",
     nrow           = 1,
     strip.position = "bottom"
   ) +
-  geom_text(
+  ggplot2::geom_text(
     data = note_labels,
     ggplot2::aes(x = Inf, y = Inf, label = gini_note),
     hjust = 1.05, vjust = 1.5,
@@ -747,41 +799,64 @@ p_final <- ggplot(
     color = "gray20",
     inherit.aes = FALSE
   ) +
-  scale_color_manual(
+  ggplot2::scale_color_manual(
     values = patch_colors,
     breaks = c("BAR","INCIP","FOR"),
     labels = c("Barren","Incipient","Forest"),
     name   = "Patch state"
   ) +
-  scale_shape_manual(
+  ggplot2::scale_shape_manual(
     values = c(16, 17, 15),  # circles / triangles / squares
     breaks = c("BAR","INCIP","FOR"),
     labels = c("Barren","Incipient","Forest"),
     name   = "Patch state"
   ) +
-  labs(
+  ggplot2::labs(
     y = "Probability",
     x = NULL
   ) +
-  theme_classic(base_size = 10) +
-  theme(
-    strip.background   = element_blank(),
+  ggplot2::theme_classic(base_size = 10) +
+  ggplot2::theme(
+    strip.background   = ggplot2::element_blank(),
     strip.placement    = "outside",
-    strip.text.x       = element_text(size = 8),
-    axis.text          = element_text(size = 7),
-    axis.title.y       = element_text(size = 9),
+    strip.text.x       = ggplot2::element_text(size = 9),
+    axis.text          = ggplot2::element_text(size = 8),
+    axis.title.y       = ggplot2::element_text(size = 10),
     legend.position    = "top",
     panel.spacing      = grid::unit(1, "lines"),
-    axis.title.x       = element_blank()
+    axis.title.x       = ggplot2::element_blank()
   )
 
 p_final
 
 ################################################################################
-# PART C. PCA biplot of habitat structure (for Fig 2 panel A)
+# PART C. PCA biplot of habitat structure
+# Show multivariate habitat/cover space for each patch.
+#
+# Definition of "state_final":
+#   - For 2024 points: diver-called patch state
+#   - For 2025 points: RF-predicted patch state from Part A
+#
+# We generate THREE plots with identical axis ranges:
+#   (1) Barrens + Forests only (no Incipient), NO vectors
+#   (2) Barrens + Forests + Incipient, NO vectors
+#   (3) Barrens + Forests + Incipient, WITH habitat/cover vectors
+#
+# Outputs:
+#   p_biplot_BAR_FOR_novecs
+#   p_biplot_ALL_novecs
+#   p_biplot_ALL_withvecs
 ################################################################################
 
-# Build state lookup and habitat_df for PCA
+
+################################################################################
+# 1. Build state lookup and habitat_df for PCA
+################################################################################
+
+# truth_all: from Part A/B (diver-called states by patch_id/year)
+# pred_2025: from Part A (predicted_state_2025 for 2025 patches)
+# hab_scaled_df: from Part A (scaled habitat/cover/physical vars per patch_id-year)
+
 state_lookup_2024_for_biplot <- truth_all %>%
   dplyr::rename(state_2024call = state)
 
@@ -814,7 +889,13 @@ habitat_df <- hab_scaled_df %>%
   ) %>%
   dplyr::filter(!is.na(state_final))
 
-# Run PCA on habitat-only predictors (no urchin/gonad/foraging vars)
+################################################################################
+# 2. Run PCA on habitat-only predictors (no urchin/gonad/foraging vars)
+################################################################################
+
+# We'll PCA the scaled habitat predictors from Part A.
+# These were already scaled/cleaned in hab_scaled_df.
+
 predictor_cols_pca <- setdiff(
   colnames(habitat_df),
   c("patch_id","site","zone","year",
@@ -850,10 +931,12 @@ loadings_df <- tibble::as_tibble(
   )
 
 ################################################################################
-# Build arrow_df for habitat/cover gradients (no lat/lon) ---------------------
+# 3. Build arrow_df for habitat/cover gradients
+#    We exclude biological/process vars like urchins, gonads, biomass, foraging.
+#    Then we recode variable names to pretty labels for vectors.
 ################################################################################
 
-arrow_ban_regex <- "(urchin|gonad|biomass|forag|foraging|\\bgi\\b|_gi$|mean_gi|sd_gi|lat|lon|long)"
+arrow_ban_regex <- "(urchin|gonad|biomass|forag|foraging|\\bgi\\b|_gi$|mean_gi|sd_gi)"
 
 arrow_df <- loadings_df %>%
   dplyr::filter(!grepl(arrow_ban_regex, variable, ignore.case = TRUE)) %>%
@@ -873,7 +956,7 @@ arrow_df <- loadings_df %>%
     )
   )
 
-# Scale arrow vectors so they sit nicely inside the point cloud
+# We scale arrow vectors so they sit nicely inside the point cloud
 range_x   <- range(scores_df$PC1, na.rm = TRUE)
 range_y   <- range(scores_df$PC2, na.rm = TRUE)
 max_span  <- max(diff(range_x), diff(range_y))
@@ -889,7 +972,11 @@ arrow_df <- arrow_df %>%
     y1 = PC2 * arrow_scaler
   )
 
-# Shared axis limits with padding so nothing gets clipped
+################################################################################
+# 4. Define shared axis limits with padding so nothing gets clipped
+#    We'll reuse these exact bounds for all three plots so they match in talks.
+################################################################################
+
 lims_x_raw <- range(scores_df$PC1, na.rm = TRUE)
 lims_y_raw <- range(scores_df$PC2, na.rm = TRUE)
 
@@ -899,14 +986,105 @@ pad_y <- diff(lims_y_raw) * 0.3  # 30% padding each side in y
 lims_x_pad <- c(lims_x_raw[1] - pad_x, lims_x_raw[2] + pad_x)
 lims_y_pad <- c(lims_y_raw[1] - pad_y, lims_y_raw[2] + pad_y)
 
-# Stable shapes for patch states
+# We want color AND shape to encode patch state.
+# Lock stable shapes so slides are consistent.
 shape_vals <- c(
   "BAR"   = 16,  # filled circle
   "FOR"   = 15,  # filled square
   "INCIP" = 17   # filled triangle
 )
 
-# Helper for biplot with vectors
+################################################################################
+# 5. Helper plotting functions
+#    - make_biplot_base(): no vectors
+#    - make_biplot_arrows(): with vectors
+#
+# Both use coord_cartesian(xlim=..., ylim=...) to zoom but DO NOT drop data,
+# so ellipses and arrow labels won't get clipped.
+################################################################################
+
+make_biplot_base <- function(score_data,
+                             lims_x_pad,
+                             lims_y_pad,
+                             patch_colors) {
+  
+  ggplot2::ggplot() +
+    # Filled 95% ellipse per state
+    ggplot2::stat_ellipse(
+      data = score_data,
+      ggplot2::aes(
+        x = PC1,
+        y = PC2,
+        color = state_final,
+        fill  = state_final
+      ),
+      type = "norm",
+      level = 0.95,
+      geom  = "polygon",
+      alpha = 0.15,
+      linewidth = 0.6,
+      show.legend = FALSE
+    ) +
+    # Ellipse outline
+    ggplot2::stat_ellipse(
+      data = score_data,
+      ggplot2::aes(
+        x = PC1,
+        y = PC2,
+        color = state_final
+      ),
+      type = "norm",
+      level = 0.95,
+      linewidth = 0.6,
+      show.legend = FALSE
+    ) +
+    # Patch points
+    ggplot2::geom_point(
+      data = score_data,
+      ggplot2::aes(
+        x = PC1,
+        y = PC2,
+        color = state_final,
+        shape = state_final
+      ),
+      size  = 3,
+      alpha = 0.8
+    ) +
+    ggplot2::scale_color_manual(
+      values = patch_colors,
+      breaks = c("BAR","FOR","INCIP"),
+      labels = c("Barren","Forest","Incipient"),
+      name   = "Patch state"
+    ) +
+    ggplot2::scale_fill_manual(
+      values = patch_colors,
+      breaks = c("BAR","FOR","INCIP"),
+      guide  = "none"
+    ) +
+    ggplot2::scale_shape_manual(
+      values = shape_vals,
+      breaks = c("BAR","FOR","INCIP"),
+      labels = c("Barren","Forest","Incipient"),
+      name   = "Patch state"
+    ) +
+    ggplot2::coord_cartesian(
+      xlim   = lims_x_pad,
+      ylim   = lims_y_pad,
+      expand = FALSE
+    ) +
+    ggplot2::labs(
+      x = "PC1",
+      y = "PC2"
+    ) +
+    ggplot2::theme_bw(base_size = 11) +
+    ggplot2::theme(
+      panel.grid      = ggplot2::element_blank(),
+      legend.position = "right",
+      legend.title    = ggplot2::element_text(size = 10),
+      legend.text     = ggplot2::element_text(size = 9)
+    )
+}
+
 make_biplot_arrows <- function(score_data,
                                arrow_data,
                                lims_x_pad,
@@ -1015,9 +1193,33 @@ make_biplot_arrows <- function(score_data,
     )
 }
 
+################################################################################
+# 6. Build the three final biplots
+################################################################################
+
+# Plot 1: Barrens + Forests only (no Incipient), NO vectors
+scores_BAR_FOR <- scores_df %>%
+  dplyr::filter(state_final %in% c("BAR","FOR"))
+
+p_biplot_BAR_FOR_novecs <- make_biplot_base(
+  score_data   = scores_BAR_FOR,
+  lims_x_pad   = lims_x_pad,
+  lims_y_pad   = lims_y_pad,
+  patch_colors = patch_colors
+)
+
+# Plot 2: Barrens + Forests + Incipient, NO vectors
 scores_ALL <- scores_df %>%
   dplyr::filter(state_final %in% c("BAR","FOR","INCIP"))
 
+p_biplot_ALL_novecs <- make_biplot_base(
+  score_data   = scores_ALL,
+  lims_x_pad   = lims_x_pad,
+  lims_y_pad   = lims_y_pad,
+  patch_colors = patch_colors
+)
+
+# Plot 3: Barrens + Forests + Incipient, WITH habitat/cover vectors
 p_biplot_ALL_withvecs <- make_biplot_arrows(
   score_data   = scores_ALL,
   arrow_data   = arrow_df,
@@ -1027,10 +1229,58 @@ p_biplot_ALL_withvecs <- make_biplot_arrows(
 )
 
 ################################################################################
-# Fig 2: PCA biplot (A), RF node impurity (B), boxplots (C) -------------------
+# 7. Print and save
 ################################################################################
 
-# Pretty variable labels for habitat RF / boxplots
+print(p_biplot_BAR_FOR_novecs)
+print(p_biplot_ALL_novecs)
+print(p_biplot_ALL_withvecs)
+
+#export
+
+ggplot2::ggsave(
+  filename = here::here("figures", "Fig2_biplot.png"),
+  plot     = p_biplot_BAR_FOR_novecs,
+  width    = 6,
+  height   = 5,
+  dpi      = 600,
+  bg       = "white"
+)
+
+#ggplot2::ggsave(
+#  filename = here::here("figures", "biplot_ALL_novecs.png"),
+#  plot     = p_biplot_ALL_novecs,
+#  width    = 6,
+#  height   = 5,
+#  dpi      = 600,
+#  bg       = "white"
+#)
+
+#ggplot2::ggsave(
+#  filename = here::here("figures", "biplot_ALL_withvecs.png"),
+#  plot     = p_biplot_ALL_withvecs,
+#  width    = 6,
+#  height   = 5,
+#  dpi      = 600,
+#  bg       = "white"
+#)
+
+
+#ggsave(
+#  filename = here::here("figures", "Fig6_incipient_correlatesv2.png"),
+#  plot = p_final,
+#  width = 9,        # in inches
+#  height = 4,        # adjust as needed
+#  dpi = 600,         # high-res for publication
+#  bg = "white"       # ensures white background if saving to PNG
+#)
+
+
+################################################################################
+# 8. Fig 2: PCA biplot (A), RF node impurity (B), boxplots (C) -----------------
+################################################################################
+
+# Pretty variable labels (same style as original Fig 2)
 pretty_labs <- c(
   cov_fleshy_red            = "Fleshy red algae cover",
   cov_mac_holdfast_live     = "Macrocystis cover",
@@ -1058,11 +1308,17 @@ pretty_labs <- c(
   cov_desmarestia_spp       = "Desmarestia spp. cover"
 )
 
-# Panel A: PCA biplot (no legend so we can use space)
+# -------------------------------------------------------------------------
+# Panel A: PCA biplot (reuse existing biplot with vectors, drop its legend)
+# -------------------------------------------------------------------------
+
 p_A <- p_biplot_ALL_withvecs +
   ggplot2::theme(legend.position = "none")
 
-# Panel B: RF variable importance (node impurity) for habitat RF
+# -------------------------------------------------------------------------
+# Panel B: RF variable importance (node impurity) for habitat RF ----------
+# -------------------------------------------------------------------------
+
 rf_imp <- rf_train2024$importance %>%
   as.data.frame() %>%
   tibble::rownames_to_column("variable")
@@ -1076,14 +1332,16 @@ if ("MeanDecreaseGini" %in% names(rf_imp)) {
 }
 
 rf_imp <- rf_imp %>%
-  # Drop latitude/longitude (and lon/long variants) from Fig 2
+  # >>> NEW: drop latitude/longitude (and any lon/long variants) from Fig 2
   dplyr::filter(!grepl("lat|lon|long", variable, ignore.case = TRUE)) %>%
+  # <<< END NEW
   dplyr::arrange(dplyr::desc(.data[[imp_col]])) %>%
   dplyr::slice_head(n = 15) %>%
   dplyr::rename(Importance = !!imp_col) %>%
   dplyr::mutate(
     variable_pretty = dplyr::recode(variable, !!!pretty_labs, .default = variable)
   )
+
 
 p_B <- rf_imp %>%
   dplyr::mutate(
@@ -1096,7 +1354,10 @@ p_B <- rf_imp %>%
   ggplot2::labs(x = NULL, y = "Node impurity") +
   ggplot2::theme(panel.grid = ggplot2::element_blank())
 
-# Panel C: Boxplots of raw observed values for top 15 vars
+# -------------------------------------------------------------------------
+# Panel C: Boxplots of raw observed values for top 15 vars ----------------
+# -------------------------------------------------------------------------
+
 top15_tbl <- rf_imp %>%
   dplyr::arrange(dplyr::desc(Importance)) %>%
   dplyr::mutate(variable_pretty = forcats::fct_inorder(variable_pretty))
@@ -1110,7 +1371,7 @@ patch_colors_named <- c(
   "Incipient" = "#D95F02"
 )
 
-# Custom theme
+# Original custom theme
 my_theme <- ggplot2::theme(
   axis.text.x      = ggplot2::element_text(size = 8, color = "black"),
   axis.text.y      = ggplot2::element_text(size = 8, color = "black"),
@@ -1151,49 +1412,52 @@ box_df <- dat_raw %>%
     )
   )
 
-p_C <- ggplot(
+p_C <- ggplot2::ggplot(
   box_df,
-  aes(
+  ggplot2::aes(
     x    = state_label,
     y    = value,
     fill = state_label,
     color = state_label
   )
 ) +
-  geom_boxplot(
+  ggplot2::geom_boxplot(
     outlier.shape = NA,
     alpha         = 0.75,
     linewidth     = 0.4
   ) +
-  facet_wrap(
+  ggplot2::facet_wrap(
     ~ variable_pretty,
     scales = "free_y",
     ncol   = 5
   ) +
-  scale_fill_manual(
+  ggplot2::scale_fill_manual(
     values = patch_colors_named,
     name   = "Patch state"
   ) +
-  scale_color_manual(
+  ggplot2::scale_color_manual(
     values = patch_colors_named,
     guide  = "none"
   ) +
-  theme_bw() + my_theme +
-  theme(
+  ggplot2::theme_bw() + my_theme +
+  ggplot2::theme(
     legend.position  = "bottom",
-    strip.text       = element_text(size = 8, face = "bold"),
-    axis.title.x     = element_blank(),
-    axis.text.x      = element_text(size = 7, angle = 20, hjust = 1),
-    axis.text.y      = element_text(size = 7),
-    panel.spacing    = unit(0.4, "lines"),
-    panel.border     = element_rect(color = "black", linewidth = 0.5)
+    strip.text       = ggplot2::element_text(size = 8, face = "bold"),
+    axis.title.x     = ggplot2::element_blank(),
+    axis.text.x      = ggplot2::element_text(size = 7, angle = 20, hjust = 1),
+    axis.text.y      = ggplot2::element_text(size = 7),
+    panel.spacing    = grid::unit(0.4, "lines"),
+    panel.border     = ggplot2::element_rect(color = "black", linewidth = 0.5)
   ) +
-  labs(
+  ggplot2::labs(
     y = "Observed value",
     x = NULL
   )
 
-# Combine A + B on top, C on bottom (Fig 2 layout)
+# -------------------------------------------------------------------------
+# Combine A + B on top, C on bottom (original Fig 2 layout) ---------------
+# -------------------------------------------------------------------------
+
 top_row <- p_A + p_B + patchwork::plot_spacer() +
   patchwork::plot_layout(widths = c(1.2, 0.6, 0.2))
 
@@ -1207,13 +1471,8 @@ Fig2 <- (top_row) / p_C +
 
 Fig2
 
-################################################################################
-# Save figures -----------------------------------------------------------------
-################################################################################
-
-# Fig 2: Patch state habitat correlates
-ggsave(
-  filename = here::here("figures", "Fig2_patch_habitat_correlates.png"),
+ggplot2::ggsave(
+  filename = here::here("figures", "Fig2_patch_drivers.png"),
   plot     = Fig2,
   width    = 8.5,
   height   = 8,
@@ -1221,12 +1480,6 @@ ggsave(
   bg       = "white"
 )
 
-# Fig 3: Process-level drivers (PDPs)
-ggsave(
-  filename = here::here("figures", "Fig3_patch_process_PDPs.png"),
-  plot     = p_final,
-  width    = 9,
-  height   = 4,
-  dpi      = 600,
-  bg       = "white"
-)
+
+
+
