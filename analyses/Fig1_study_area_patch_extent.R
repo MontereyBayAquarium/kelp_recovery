@@ -37,7 +37,7 @@ site_patches <- st_read(here::here("output","gis_data","processed","site_patch_p
 
 #load LDA-predicted patch types
 #lda_patch <- load(here::here("output","lda_patch_transitionsv2.rda")) #old
-lda_patch <- load(here::here("output","lda_patch_transitionsv3.rda")) #new
+lda_patch <- load(here::here("output","lda_patch_transitionsv3.rda")) #new -- unconstrained
 
 
 # read CA state
@@ -353,7 +353,7 @@ g2 <-ggplot(quad_build3 %>% filter(year(survey_date) == 2025)) +
   my_theme
 #g2
 
-g <- ggarrange(g1, g2, common.legend = TRUE, legend = "right")
+g <- ggpubr::ggarrange(g1, g2, common.legend = TRUE, legend = "right")
 g
 
 #ggsave(
