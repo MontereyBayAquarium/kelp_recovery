@@ -239,13 +239,13 @@ g1 <-ggplot(quad_build3 %>% filter(year(survey_date) == 2024)) +
   # plot patches
   geom_sf(aes(fill = pred_patch), color = "black") +
   # add foraging locations (sea otter observations)
-  geom_sf(
-    data = scan_sf %>% filter(year == 2024),
-    aes(shape = "Sea otter \nobservation"),
-    color = "black",
-    size = 0.5,
-    alpha = 0.3
-  ) +
+ # geom_sf(
+#    data = scan_sf %>% filter(year == 2024),
+#    aes(shape = "Sea otter \nobservation"),
+#    color = "black",
+#    size = 0.5,
+#    alpha = 0.3
+#  ) +
   # add survey sites (subtidal sites)
   geom_sf(
     data = st_centroid(quad_build3 %>% filter(year(survey_date) == 2024)),
@@ -272,43 +272,61 @@ g1 <-ggplot(quad_build3 %>% filter(year(survey_date) == 2024)) +
     shape = ""  # legend title for shapes
   ) +
   scale_fill_manual(
+    name   = "Patch type",
     values = c(
       "BAR"   = "#7570B3",
       "FOR"   = "#1B9E77",
       "INCIP" = "#D95F02"
-    )
-  ) +
-  # custom shape legend
+    ),
+    breaks = c("BAR","FOR","INCIP"),
+    labels = c("Barren","Forest","Incipient")
+  )+
+  # custom shape legend with otters
+  #scale_shape_manual(
+  #  values = c(
+  #    "Subtidal survey \nsite"        = 24,  # filled triangle
+  #    "Sea otter \nobservation" = 21  # filled circle
+  #  )
+  #) +
+  #guides(
+  #  fill = guide_legend(order = 1),
+  #  shape = guide_legend(order = 2, override.aes = list(
+  #    fill = c("black", "yellow"),
+  #    color = c("black", "black"),
+  #    alpha = c(1, 0.6),
+  #    size = c(3, 2)
+  #  ))
+ # ) +
+  # custom shape legend without otters
   scale_shape_manual(
     values = c(
-      "Subtidal survey \nsite"        = 24,  # filled triangle
-      "Sea otter \nobservation" = 21  # filled circle
+      "Subtidal survey \nsite"        = 24
     )
   ) +
   guides(
     fill = guide_legend(order = 1),
-    shape = guide_legend(order = 2, override.aes = list(
-      fill = c("black", "yellow"),
-      color = c("black", "black"),
-      alpha = c(1, 0.6),
-      size = c(3, 2)
+    shape = guide_legend(order = 1, override.aes = list(
+      fill = c("yellow"),
+      color = c( "black"),
+      alpha = c(0.6),
+      size = c(2)
     ))
   ) +
   my_theme 
-#g1
+g1
 
 
 g2 <-ggplot(quad_build3 %>% filter(year(survey_date) == 2025)) +
   # plot patches
   geom_sf(aes(fill = pred_patch), color = "black") +
   # add foraging locations (sea otter observations)
-  geom_sf(
-    data = scan_sf %>% filter(year == 2025),
-    aes(shape = "Sea otter \nobservation"),
-    color = "black",
-    size = 0.5,
-    alpha = 0.3
-  ) +
+#  geom_sf(
+#    data = scan_sf %>% filter(year == 2025),
+#    aes(shape = "Sea otter \nobservation"),
+#    color = "black",
+#    size = 0.5,
+#    alpha = 0.3
+#  ) +
   # add survey sites (subtidal sites)
   geom_sf(
     data = st_centroid(quad_build3 %>% filter(year(survey_date) == 2025)),
@@ -328,39 +346,57 @@ g2 <-ggplot(quad_build3 %>% filter(year(survey_date) == 2025)) +
     shape = ""  # legend title for shapes
   ) +
   scale_fill_manual(
+    name   = "Patch type",
     values = c(
       "BAR"   = "#7570B3",
       "FOR"   = "#1B9E77",
       "INCIP" = "#D95F02"
-    )
-  ) +
-  # custom shape legend
+    ),
+    breaks = c("BAR","FOR","INCIP"),
+    labels = c("Barren","Forest","Incipient")
+  )+
+  # custom shape legend with otters
+  #scale_shape_manual(
+  #  values = c(
+  #    "Subtidal survey \nsite"        = 24,  # filled triangle
+  #    "Sea otter \nobservation" = 21  # filled circle
+  #  )
+  #) +
+  #guides(
+  #  fill = guide_legend(order = 1),
+  #  shape = guide_legend(order = 2, override.aes = list(
+  #    fill = c("black", "yellow"),
+  #    color = c("black", "black"),
+  #    alpha = c(1, 0.6),
+  #    size = c(3, 2)
+  #  ))
+  # ) +
+  # custom shape legend without otters
   scale_shape_manual(
     values = c(
-      "Subtidal survey \nsite"        = 24,  # filled triangle
-      "Sea otter \nobservation" = 21  # filled circle
+      "Subtidal survey \nsite"        = 24
     )
   ) +
   guides(
     fill = guide_legend(order = 1),
-    shape = guide_legend(order = 2, override.aes = list(
-      fill = c("black", "yellow"),
-      color = c("black", "black"),
-      alpha = c(1, 0.6),
-      size = c(3, 2)
+    shape = guide_legend(order = 1, override.aes = list(
+      fill = c("yellow"),
+      color = c( "black"),
+      alpha = c(0.6),
+      size = c(2)
     ))
   ) +
-  my_theme
+  my_theme 
 #g2
 
 g <- ggpubr::ggarrange(g1, g2, common.legend = TRUE, legend = "right")
 g
 
-#ggsave(
-#   here::here("figures", "Fig1_map_figure.png"),
-#   g,
-#   width = 7, height = 4, dpi = 600, bg = "white"
-# )
+ggsave(
+   here::here("figures", "Fig1_map_figure.png"),
+   g,
+   width = 7, height = 4, dpi = 600, bg = "white"
+ )
 
 
 
