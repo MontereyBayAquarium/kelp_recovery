@@ -168,6 +168,32 @@ prey_cols <- c(
 # 7. Plot panels
 ################################################################################
 
+################################################################################
+# Custom theme (matches Josh's usual style)
+################################################################################
+
+# Custom theme
+my_theme <- theme(
+  axis.text.x      = ggplot2::element_text(size = 8, color = "black"),
+  axis.text.y      = ggplot2::element_text(size = 8, color = "black"),
+  axis.title       = ggplot2::element_text(size = 10, color = "black"),
+  legend.text      = ggplot2::element_text(size = 8, color = "black"),
+  legend.title     = ggplot2::element_text(size = 8, color = "black"),
+  plot.tag         = ggplot2::element_text(size = 10, color = "black"),
+  panel.grid       = ggplot2::element_blank(),
+  panel.background = ggplot2::element_blank(),
+  axis.line        = ggplot2::element_line(colour = "black"),
+  legend.key       = ggplot2::element_blank(),
+  plot.title = element_text(face = "plain", size = 11, hjust = 0),
+  legend.background = ggplot2::element_rect(
+    fill = scales::alpha("blue", 0)
+  ),
+  strip.text       = ggplot2::element_text(
+    size = 10, face = "bold", color = "black", hjust = 0
+  ),
+  strip.background = ggplot2::element_blank()
+)
+
 # --- Panel A: Otter occupancy -------------------------------------------------
 gA <- ggplot(occupancy_summary, aes(x = pred_patch, y = mean_density, fill = pred_patch)) +
   geom_col(color = "black", width = 0.6) +
@@ -178,12 +204,11 @@ gA <- ggplot(occupancy_summary, aes(x = pred_patch, y = mean_density, fill = pre
     y = expression("Mean sea otter density (individuals km"^{-2}*")"),
     title = "A. Sea otter occupancy by patch type"
   ) +
-  theme_bw(base_size = 12) +
+  theme_bw()+
   theme(
     legend.position = "none",
-    panel.grid = element_blank(),
-    plot.title = element_text(face = "plain", size = 13, hjust = 0)
-  )
+    panel.grid = element_blank()
+  ) + my_theme
 
 # --- Panel B: Behavioral composition -----------------------------------------
 gB <- ggplot(behavior_summary, aes(x = pred_patch, y = prop, fill = behav)) +
@@ -194,12 +219,12 @@ gB <- ggplot(behavior_summary, aes(x = pred_patch, y = prop, fill = behav)) +
     y = "Proportion of observed behaviors",
     title = "B. Behavioral composition by patch type"
   ) +
-  theme_bw(base_size = 12) +
+  theme_bw() +
   theme(
     legend.position = "right",
     panel.grid = element_blank(),
     plot.title = element_text(face = "plain", size = 13, hjust = 0)
-  )
+  ) + my_theme
 
 # --- Panel C: Focal bouts by prey group --------------------------------------
 gC <- ggplot(focal_summary, aes(x = pred_patch, y = prop, fill = prey_group)) +
@@ -210,12 +235,12 @@ gC <- ggplot(focal_summary, aes(x = pred_patch, y = prop, fill = prey_group)) +
     y = "Proportion of focal bouts (>3 successful dives)",
     title = "C. Bouts by prey and patch type"
   ) +
-  theme_bw(base_size = 12) +
+  theme_bw() +
   theme(
     panel.grid = element_blank(),
     legend.position = "right",
     plot.title = element_text(face = "plain", size = 13, hjust = 0)
-  )
+  ) + my_theme
 
 ################################################################################
 # 8. Combine panels into Supplementary Figure S1
