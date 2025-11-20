@@ -1,6 +1,6 @@
 ################################################################################
-# Patch-State Habitat Classification + PCA Ordination (Panels A–C)
-# Joshua G. Smith — UCSC Nearshore Ecology Research Group
+# Patch-State Habitat Classification 
+# Joshua G. Smith; jogsmith@ucsc.edu
 ################################################################################
 
 rm(list = ls())
@@ -201,11 +201,13 @@ patch_pred2025_tbl <- pred_2025 %>%
 final_patch_sf <- patch_geom_tbl %>%
   dplyr::left_join(
     patch_calls_tbl,
-    by = c("patch_id","site","zone")
+    by = c("patch_id","site","zone"),
+    relationship = "many-to-many",
   ) %>%
   dplyr::left_join(
     patch_pred2025_tbl,
-    by = "patch_id"
+    by = "patch_id",
+    relationship = "many-to-many",
   ) %>%
   dplyr::mutate(
     patch_2024 = as.character(patch_2024),
@@ -228,8 +230,8 @@ transitions_tbl_constrained <- final_patch_sf %>%
 str(transitions_tbl_constrained)
 
 # Save to disk (.rda)
-save(transitions_tbl_constrained,
-   file = here::here("output","lda_patch_transitionsv3.rda"))
+#save(transitions_tbl_constrained,
+ #  file = here::here("output","lda_patch_transitionsv3.rda"))
 
 # 5e. Write shapefile for GIS visualization
 #out_dir <- here::here("output", "gis_data", "processed", "patch_state_RFsummary_2024_2025_shp")
@@ -349,7 +351,7 @@ p_B <- rf_imp %>%
   geom_col(fill = "grey40") +
   coord_flip() +
   theme_bw() +
-  labs(x = NULL, y = "RF Node Impurity (MeanDecreaseGini)") +
+  labs(x = NULL, y = "Node impurity") +
   theme(panel.grid = element_blank())
 
 ################################################################################
@@ -369,6 +371,8 @@ patch_colors_named <- c(
 )
 
 box_df <- dat_raw %>%
+  #drop extreme outliers
+  filter(density20m2_lamset < 3) %>%
   left_join(truth_all, by = c("patch_id","site","zone","year")) %>%
   dplyr::select(state, all_of(top15_tbl$variable)) %>%
   pivot_longer(cols=-state, names_to="variable", values_to="value") %>%
@@ -381,6 +385,7 @@ box_df <- dat_raw %>%
       labels = c("Barren","Forest","Incipient")
     )
   )
+
 
 p_C <- ggplot(box_df, aes(x=state_label, y=value,
                           fill=state_label, color=state_label)) +
@@ -415,3 +420,15 @@ final_fig_pca <- (top_row) / p_C +
         plot.margin=ggplot2::margin(t=5,r=10,b=5,l=10))
 
 final_fig_pca
+
+ ggplot2::ggsave(
+   filename = here::here("figures", "Fig2_patch_drivers.png"),
+   plot     = final_fig_pca,
+   width    = 8.5,
+   height   = 8,
+   dpi      = 600,
+   bg       = "white"
+ )
+
+
+
