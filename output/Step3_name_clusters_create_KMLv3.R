@@ -184,7 +184,7 @@ ggplot(landsat_build3, aes(x = year, y = perc_of_baseline)) +
 ################################################################################
 #determine site type
 
-# Updated classification function using a threshold of 10% of the baseline mean.
+# Updated classification function using a threshold of 5% of the baseline mean.
 # Any measurement less than 0.1 is considered equivalent to 0.
 #classify_site <- function(values, threshold = 0.1) {
 #  if (!any(values < threshold)) { 
@@ -252,14 +252,72 @@ landsat_classified <- landsat_build3 %>%
   #filter(year > 2013) %>%
   left_join(site_class, by = "site_num")
 
+################################################################################
+#Figure S1
+
+my_theme <- theme(
+  axis.text.x      = element_text(size = 8, color = "black"),
+  axis.text.y      = element_text(size = 8, color = "black"),
+  axis.title       = element_text(size = 10, color = "black"),
+  legend.text      = element_text(size = 8, color = "black"),
+  legend.title     = element_text(size = 8, color = "black"),
+  plot.tag         = element_text(size = 10, color = "black"),
+  panel.grid       = element_blank(),
+  panel.background = element_blank(),
+  axis.line        = element_line(colour = "black"),
+  legend.background = element_rect(
+    fill = scales::alpha("blue", 0)
+  ),
+  legend.key = element_rect(fill = "transparent", color = NA),
+  legend.position = "top",
+  strip.text       = element_text(
+    size = 8, face = "plain", color = "black", hjust = 0
+  ),
+  strip.background = element_blank()
+)
+
 # Plot percent of max for each site, colored by site type
-ggplot(landsat_classified, aes(x = year, y = perc_of_baseline, color = site_type)) +
-  geom_point() +
-  geom_smooth(se = TRUE) +
+# Patch-state colors (same as other figs)
+patch_cols <- c(
+  "Barren"    = "#7570B3",
+  "Incipient" = "#D95F02",
+  "Forest"    = "#1B9E77"
+)
+
+g <- ggplot(
+  landsat_classified,
+  aes(x = year, y = perc_of_baseline, color = site_type)
+) +
+  geom_point(alpha = 0.8, size = 1.1) +
+  geom_smooth(se = FALSE, linewidth = 0.6) +
   facet_wrap(~ site_num, scales = "free_y") +
+  scale_color_manual(
+    values = patch_cols,
+    breaks = c("Barren", "Incipient", "Forest"),
+    name   = "Patch state"
+  ) +
+  #add heatwave period
+  annotate("rect",
+           xmin = 2014, xmax = 2016,
+           ymin = -Inf, ymax = Inf,
+           fill = "indianred", alpha = 0.3) +
   theme_bw() +
-  base_theme +
-  labs(y = "Percent of baseline", color = "Site type")
+  labs(
+    x = "Year",
+    y = "Percent of baseline",
+    color = "Patch state"
+  ) + my_theme 
+g
+
+# Fig 2: Patch state habitat correlates
+ggsave(
+  filename = here::here("figures", "FigS1_patch_canopy_trends.png"),
+  plot     = g,
+  width    = 14,
+  height   = 8,
+  dpi      = 600,
+  bg       = "white"
+)
 
 
 ################################################################################
