@@ -255,7 +255,7 @@ g <- ggplot(urch_dat_orig, aes(x = test_diameter_mm, y = animal_24hr_mass_g)) +
 g
 
 
-ggsave(g, file = file.path(here::here("figures","SX_purple_urchin_td_biomass.png")), width = 6.5,
+ggsave(g, file = file.path(here::here("figures","S3_purple_urchin_td_biomass.png")), width = 6.5,
        height = 6.5, units = "in")
 
 ################################################################################
@@ -265,7 +265,7 @@ simulated_biomass <- simulated_sizes %>%
   unnest(simulated_sizes_cm) %>%
   mutate(
     test_diameter_mm = simulated_sizes_cm * 10,  # cm → mm
-    biomass_g = -14.2 + 7.44 * exp(0.04 * test_diameter_mm),
+    biomass_g = -14.2 + 7.44 * exp(0.041 * test_diameter_mm),
     biomass_g = if_else(biomass_g < 0.5, 0.5, biomass_g)  # floor small/negative values
   )
 
