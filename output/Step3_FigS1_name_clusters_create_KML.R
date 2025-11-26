@@ -258,9 +258,9 @@ landsat_classified <- landsat_build3 %>%
 my_theme <- theme(
   axis.text.x      = element_text(size = 8, color = "black"),
   axis.text.y      = element_text(size = 8, color = "black"),
-  axis.title       = element_text(size = 10, color = "black"),
-  legend.text      = element_text(size = 8, color = "black"),
-  legend.title     = element_text(size = 8, color = "black"),
+  axis.title       = element_text(size = 12, color = "black"),
+  legend.text      = element_text(size = 12, color = "black"),
+  legend.title     = element_text(size = 12, color = "black"),
   plot.tag         = element_text(size = 10, color = "black"),
   panel.grid       = element_blank(),
   panel.background = element_blank(),
@@ -304,7 +304,7 @@ g <- ggplot(
   theme_bw() +
   labs(
     x = "Year",
-    y = "Percent of baseline",
+    y = "Proportion of baseline",
     color = "Patch state"
   ) + my_theme 
 g
