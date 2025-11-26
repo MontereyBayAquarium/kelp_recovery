@@ -26,7 +26,7 @@ coast_path  <- "/Volumes/enhydra/data/kelp_recovery/gis_data/raw/Coastn83/coastn
 ca_counties <- st_read(file.path(basedir, "gis_data/raw/ca_county_boundaries/s7vc7n.shp")) 
 
 #multivariate patch types
-load(here::here("output","lda_patch_transitions.rda"))
+load(here::here("output","lda_patch_transitionsv3.rda"))
 
 # Get land
 usa <- rnaturalearth::ne_states(country="United States of America", returnclass = "sf")
@@ -49,7 +49,7 @@ base_theme <-  theme(axis.text=element_text(size=7, color = "black"),
                      axis.title=element_text(size=8,color = "black"),
                      legend.text=element_text(size=7,color = "black"),
                      legend.title=element_text(size=8,color = "black"),
-                     plot.tag=element_text(size=8,color = "black"),
+                     plot.tag=element_text(size=10,color = "black"),
                      # Gridlines
                      panel.grid.major = element_blank(), 
                      panel.grid.minor = element_blank(),
@@ -127,12 +127,14 @@ p1 <- ggplot() +
   #         symbol = 10)+
   theme_bw() +  theme(
     plot.tag.position = c(-0.03, 1),
-    axis.title = element_blank()) +
+    axis.title = element_blank(),
+    legend.position = "none") +
   labs(title = "",
        x="",
-       y="")+
-  theme(axis.text.x = element_blank(),
-        axis.text.y = element_blank())+
+       y="",
+       tag = "A")+
+  #theme(axis.text.x = element_blank(),
+  #      axis.text.y = element_blank())+
   #guides(fill = guide_legend(override.aes = list(size = 3))) +
   base_theme+
   coord_sf(xlim = c(-121.99, -121.88), ylim = c(36.519, 36.645), crs = 4326) 
@@ -166,8 +168,8 @@ p2 <- ggplot() +
   # Plot other spatial layers (e.g., county boundaries)
   geom_sf(data = ca_counties, fill = "gray", color = "gray80") +
   # Include the inset map
-  annotation_custom(grob = g1_inset, 
-                    xmin = -122.01, xmax = -121.96, ymin = 36.625) +
+ # annotation_custom(grob = g1_inset, 
+  #                  xmin = -122.01, xmax = -121.96, ymin = 36.625) +
   # Add cluster labels with repelling to avoid overlaps
   ggrepel::geom_label_repel(
     data = cluster_coord,
@@ -199,14 +201,15 @@ p2 <- ggplot() +
   base_theme +
   coord_sf(xlim = c(-121.99, -121.88), ylim = c(36.519, 36.645), crs = 4326)+
   theme(
-    axis.text.x = element_blank(),   
+    #axis.text.x = element_blank(),   
     axis.text.y = element_blank(),   
-    axis.ticks.x = element_blank(),  
+    #axis.ticks.x = element_blank(),  
     axis.ticks.y = element_blank(),  
     panel.grid.major = element_blank(),
     panel.grid.minor = element_blank(),
-    axis.title = element_blank()
-  )
+    axis.title = element_blank(),
+    legend.position = "none"
+  ) + labs(tag = "B")
 
 p2
 
@@ -299,15 +302,48 @@ non_overlap_smoothed <- smooth(non_overlap_merged_clean, method = "ksmooth", smo
 non_overlap_smoothed_wgs <- st_transform(non_overlap_smoothed, 4326)
 
 
-ggplot() +
+p3 <- ggplot() +
   geom_sf(data = non_overlap_smoothed_wgs, aes(fill = site_type), color = "black") +
   geom_sf(data = ca_counties_wgs, fill = "gray", color = "gray80") +
   scale_fill_manual(values = c("Forest" = "#1B9E77",
                                "Barren" = "#7570B3",
-                               "Incipient" = "#D95F02")) +
+                               "Incipient" = "#D95F02"),
+                    name = "Patch type") +
   coord_sf(xlim = c(-121.99, -121.88), ylim = c(36.519, 36.645)) +
-  theme_minimal() +
-  ggtitle("Smoothed, Non-Overlapping 75m Buffers (Merged by Site Type)")
+  theme_bw() +
+  base_theme +
+  coord_sf(xlim = c(-121.99, -121.88), ylim = c(36.519, 36.645), crs = 4326)+
+  theme(
+    #axis.text.x = element_blank(),   
+    axis.text.y = element_blank(),   
+    #axis.ticks.x = element_blank(),  
+    axis.ticks.y = element_blank(),  
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.title = element_blank()
+  ) +
+  labs(tag = "C")
+
+
+p3
+
+
+################################################################################
+#Figure S2
+
+p <- ggarrange(p1, p2, p3, nrow = 1, align = "h",
+               widths = c(0.5,0.5,0.5)) 
+
+p
+
+ggsave(
+  filename = here::here("figures", "FigS2_cluster_assignments.png"),
+  plot     = p,
+  width    = 14,
+  height   = 5,
+  dpi      = 600,
+  bg       = "white"
+)
 
 
 ################################################################################
