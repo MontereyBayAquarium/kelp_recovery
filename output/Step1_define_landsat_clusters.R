@@ -18,12 +18,9 @@ rm(list=ls())
 
 ################################################################################
 
-#Notes:
-#1. need to check site naming to make sure set.seed worked
 
-
-######
 #required packages
+require(librarian)
 librarian::shelf(tidyverse, sf, raster, shiny, tmap, terra, tidyterra, RColorBrewer)
 
 #set directories 
@@ -32,7 +29,7 @@ basedir <- "/Volumes/enhydra/data/kelp_recovery/"
 #read state
 ca_counties_orig <- st_read(file.path(basedir, "gis_data/raw/ca_county_boundaries/s7vc7n.shp")) 
 
-#read landsat raw
+#read landsat raw - processed in Step0
 landsat_orig <- st_read(file.path(basedir, "kelp_landsat/processed/monterey_peninsula/landsat_mpen_1984_2023_points_withNAs.shp"))
 
 # Get land
@@ -70,7 +67,7 @@ set.seed(1985)
 hierarchical_clusters <- hclust(as.dist(dist_matrix))
 
 # Cut the tree to define clusters (adjust the height threshold as needed)
-height_threshold <- 500  # Adjust this based on cluster size
+height_threshold <- 500  
 cluster_assignment <- cutree(hierarchical_clusters, h = height_threshold)
 
 # Add cluster assignments back to the original 'sf' object
