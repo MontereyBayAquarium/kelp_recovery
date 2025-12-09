@@ -14,7 +14,7 @@ rm(list = ls())
 #Step 0: set paths and load data
 require(librarian)
 librarian::shelf(tidyverse, lubridate, sf, stringr, purrr, terra, janitor,
-                 rnaturalearth, rnaturalearthdata)
+                 rnaturalearth, rnaturalearthdata, ggspatial)
 
 datadir <- "/Volumes/enhydra/data/kelp_recovery/"
 localdir <- here::here("output")
@@ -37,7 +37,7 @@ site_patches <- st_read(here::here("output","gis_data","processed","site_patch_p
 
 #load LDA-predicted patch types
 #lda_patch <- load(here::here("output","lda_patch_transitionsv2.rda")) #old
-lda_patch <- load(here::here("output","lda_patch_transitionsv5.rda")) #new -- unconstrained
+lda_patch <- load(here::here("output","lda_patch_transitionsv3.rda")) #new -- unconstrained
 
 
 # read CA state
@@ -312,6 +312,20 @@ g1 <-ggplot(quad_build3 %>% filter(year(survey_date) == 2024)) +
       size = c(2)
     ))
   ) +
+  # north arrow (upper right)
+  annotation_north_arrow(
+    location = "tr",
+    which_north = "true",
+    height = unit(0.5, "cm"),
+    width  = unit(0.5, "cm"),
+    style  = north_arrow_orienteering(text_col = NA)
+  )+
+  # scale bar (lower right)
+  annotation_scale(
+    location = "br",
+    width_hint = 0.25,
+    text_cex = 0.8
+  ) +
   my_theme 
 g1
 
@@ -393,7 +407,7 @@ g <- ggpubr::ggarrange(g1, g2, common.legend = TRUE, legend = "right")
 g
 
 ggsave(
-   here::here("figures", "Fig1_map_figure.png"),
+   here::here("figures", "Fig1_map_figurev2.png"),
    g,
    width = 7, height = 4, dpi = 600, bg = "white"
  )
