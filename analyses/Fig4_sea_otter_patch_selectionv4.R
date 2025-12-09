@@ -35,6 +35,7 @@ recode_patches <- function(df) {
         prey_name == "urchin_f" ~ "FOR",
         prey_name == "urchin_i" ~ "INCIP"
       ),
+      # order for ridge y-axis (FOR, BAR, INCIP)
       patch_type = factor(patch_type, levels = c("FOR", "BAR", "INCIP"))
     )
 }
@@ -55,7 +56,7 @@ cr_focus <- cr_focus %>%
 # 4. Expand posterior draws from mean + SD -------------------------------------
 ################################################################################
 
-expand_posterior <- function(tbl, n = 4000) {
+expand_posterior <- function(tbl, n = 5000) {
   tbl %>%
     rowwise() %>%
     mutate(draws = list(rnorm(n, mean, sd))) %>%
@@ -87,9 +88,11 @@ cr_sum  <- posterior_summary(cr_draws)
 # 6. Plot function for posterior ridgelines ------------------------------------
 ################################################################################
 
-patch_colors <- c("BAR" = "#7570B3",
-                  "INCIP" = "#D95F02",
-                  "FOR" = "#1B9E77")
+patch_colors <- c(
+  "BAR"   = "#7570B3",
+  "INCIP" = "#D95F02",
+  "FOR"   = "#1B9E77"
+)
 
 plot_posterior <- function(draw_df, sum_df, xlab, tag_title, show_legend = FALSE) {
   
@@ -119,7 +122,9 @@ plot_posterior <- function(draw_df, sum_df, xlab, tag_title, show_legend = FALSE
       axis.text    = element_text(color = "black"),
       axis.text.y  = element_blank(),
       legend.title = element_text(size = 9),
-      legend.text  = element_text(size = 8)
+      legend.text  = element_text(size = 8),
+      # match tag styling to Panel B
+      plot.tag     = element_text(size = 10, color = "black")
     )
   
   # Legend toggle
@@ -130,7 +135,6 @@ plot_posterior <- function(draw_df, sum_df, xlab, tag_title, show_legend = FALSE
   return(p)
 }
 
-
 ################################################################################
 # 7. Panel A: PUR foraging effort across patch types ---------------------------
 ################################################################################
@@ -138,7 +142,7 @@ plot_posterior <- function(draw_df, sum_df, xlab, tag_title, show_legend = FALSE
 pA <- plot_posterior(
   eta_draws,
   eta_sum,
-  xlab      = "Foraging effort (proportion of total)",
+  xlab      = "Foraging effort (proportion of sea \nurchins in patch vs. all other prey)",
   tag_title = "A"
 )
 
@@ -217,7 +221,15 @@ focal_summary <- focal_joined %>%
     .groups    = "drop"
   ) %>%
   group_by(pred_patch) %>%
-  mutate(prop = mean_bouts / sum(mean_bouts))
+  mutate(prop = mean_bouts / sum(mean_bouts)) %>%
+  ungroup() %>%
+  # enforce order: Forest, Barren, Incipient
+  mutate(
+    pred_patch = factor(
+      pred_patch,
+      levels = c("Forest", "Barren", "Incipient")
+    )
+  )
 
 prey_cols <- c(
   "Bivalve"            = "#1F78B4",   # teal blue
@@ -257,7 +269,8 @@ pB <- ggplot(
   theme(
     panel.grid     = element_blank(),
     legend.position = "right"
-  ) + my_theme
+  ) +
+  my_theme
 
 ################################################################################
 # 9. Combine Panel A + Panel B -------------------------------------------------
@@ -269,13 +282,8 @@ energetics_combined <- pA + pB +
 
 energetics_combined
 
-
 ggsave(
   here::here("figures", "Fig4_effort_allocation.png"),
   energetics_combined,
   width = 8, height = 4, dpi = 600, bg = "white"
 )
-
-
-
-
