@@ -727,9 +727,38 @@ note_labels <- rf_driver$importance %>%
   ) %>%
   dplyr::distinct(predictor_lab, gini_note)
 
-# Fig 3: PDPs
+## 1. Compute facet order from Gini (descending)
+gini_order <- rf_driver$importance %>%
+  as.data.frame() %>%
+  tibble::rownames_to_column("variable") %>%
+  dplyr::filter(variable %in% pdp_plot_vars) %>%
+  dplyr::mutate(
+    predictor_lab = pretty_lab_map[variable]
+  ) %>%
+  dplyr::arrange(dplyr::desc(MeanDecreaseGini)) %>%
+  dplyr::pull(predictor_lab)
+
+## 2. Apply this order to the PDP data
+pdp_all_ordered <- pdp_all %>%
+  dplyr::mutate(
+    predictor_lab = factor(predictor_lab, levels = gini_order)
+  )
+
+## 3. Build Gini note labels, using the same factor levels
+note_labels <- rf_driver$importance %>%
+  as.data.frame() %>%
+  tibble::rownames_to_column("variable") %>%
+  dplyr::filter(variable %in% pdp_plot_vars) %>%
+  dplyr::mutate(
+    predictor_lab = pretty_lab_map[variable],
+    gini_note     = paste0("Gini = ", round(MeanDecreaseGini, 2)),
+    predictor_lab = factor(predictor_lab, levels = gini_order)
+  ) %>%
+  dplyr::distinct(predictor_lab, gini_note)
+
+## 4. Final plot
 p_final <- ggplot(
-  pdp_all,
+  pdp_all_ordered,
   aes(x = x, y = y, color = state, shape = state)
 ) +
   geom_line(linewidth = 1.2) +
@@ -749,14 +778,14 @@ p_final <- ggplot(
   ) +
   scale_color_manual(
     values = patch_colors,
-    breaks = c("BAR","INCIP","FOR"),
-    labels = c("Barren","Incipient","Forest"),
+    breaks = c("BAR", "INCIP", "FOR"),
+    labels = c("Barren", "Incipient", "Forest"),
     name   = "Patch state"
   ) +
   scale_shape_manual(
-    values = c(16, 17, 15),  # circles / triangles / squares
-    breaks = c("BAR","INCIP","FOR"),
-    labels = c("Barren","Incipient","Forest"),
+    values = c(16, 17, 15),  # circle / triangle / square
+    breaks = c("BAR", "INCIP", "FOR"),
+    labels = c("Barren", "Incipient", "Forest"),
     name   = "Patch state"
   ) +
   labs(
@@ -776,6 +805,7 @@ p_final <- ggplot(
   )
 
 p_final
+
 
 ################################################################################
 # PART C. PCA biplot of habitat structure (for Fig 2 panel A)
@@ -853,6 +883,7 @@ loadings_df <- tibble::as_tibble(
 # Build arrow_df for habitat/cover gradients (no lat/lon) ---------------------
 ################################################################################
 
+
 arrow_ban_regex <- "(urchin|gonad|biomass|forag|foraging|\\bgi\\b|_gi$|mean_gi|sd_gi|lat|lon|long)"
 
 arrow_df <- loadings_df %>%
@@ -873,7 +904,7 @@ arrow_df <- loadings_df %>%
     )
   )
 
-# Scale arrow vectors so they sit nicely inside the point cloud
+## 2. Scale arrow vectors so they sit nicely inside the point cloud
 range_x   <- range(scores_df$PC1, na.rm = TRUE)
 range_y   <- range(scores_df$PC2, na.rm = TRUE)
 max_span  <- max(diff(range_x), diff(range_y))
@@ -889,28 +920,26 @@ arrow_df <- arrow_df %>%
     y1 = PC2 * arrow_scaler
   )
 
-# Shared axis limits with padding so nothing gets clipped
-lims_x_raw <- range(scores_df$PC1, na.rm = TRUE)
-lims_y_raw <- range(scores_df$PC2, na.rm = TRUE)
+## 3. Build common symmetric limits for equal aspect (square plot)
+all_x <- c(scores_df$PC1, arrow_df$x1, 0)
+all_y <- c(scores_df$PC2, arrow_df$y1, 0)
 
-pad_x <- diff(lims_x_raw) * 0.3  # 30% padding each side in x
-pad_y <- diff(lims_y_raw) * 0.3  # 30% padding each side in y
+max_abs <- max(abs(c(all_x, all_y)), na.rm = TRUE)
+pad     <- 0.1 * max_abs      # 10% padding
 
-lims_x_pad <- c(lims_x_raw[1] - pad_x, lims_x_raw[2] + pad_x)
-lims_y_pad <- c(lims_y_raw[1] - pad_y, lims_y_raw[2] + pad_y)
+lims_sq <- c(-max_abs - pad, max_abs + pad)
 
-# Stable shapes for patch states
+## 4. Stable shapes for patch states
 shape_vals <- c(
   "BAR"   = 16,  # filled circle
   "FOR"   = 15,  # filled square
   "INCIP" = 17   # filled triangle
 )
 
-# Helper for biplot with vectors
+## 5. Helper for biplot with vectors (square aspect)
 make_biplot_arrows <- function(score_data,
                                arrow_data,
-                               lims_x_pad,
-                               lims_y_pad,
+                               lims_sq,
                                patch_colors) {
   
   ggplot2::ggplot() +
@@ -997,11 +1026,11 @@ make_biplot_arrows <- function(score_data,
       labels = c("Barren","Forest","Incipient"),
       name   = "Patch state"
     ) +
-    ggplot2::coord_cartesian(
-      xlim   = lims_x_pad,
-      ylim   = lims_y_pad,
+    ggplot2::coord_equal(
+      xlim   = c(-8.8, 8),
+      ylim   = c(-8.8, 8),
       expand = FALSE
-    ) +
+    )+
     ggplot2::labs(
       x = "PC1",
       y = "PC2"
@@ -1015,16 +1044,19 @@ make_biplot_arrows <- function(score_data,
     )
 }
 
+## 6. Filter scores + build final plot
 scores_ALL <- scores_df %>%
   dplyr::filter(state_final %in% c("BAR","FOR","INCIP"))
 
 p_biplot_ALL_withvecs <- make_biplot_arrows(
   score_data   = scores_ALL,
   arrow_data   = arrow_df,
-  lims_x_pad   = lims_x_pad,
-  lims_y_pad   = lims_y_pad,
+  lims_sq      = lims_sq,
   patch_colors = patch_colors
 )
+
+p_biplot_ALL_withvecs
+
 
 ################################################################################
 # Fig 2: PCA biplot (A), RF node impurity (B), boxplots (C) -------------------
@@ -1032,30 +1064,31 @@ p_biplot_ALL_withvecs <- make_biplot_arrows(
 
 # Pretty variable labels for habitat RF / boxplots
 pretty_labs <- c(
-  cov_fleshy_red            = "Fleshy red algae cover",
-  cov_mac_holdfast_live     = "Macrocystis cover",
-  cov_phragmatopoma         = "Phragmatopoma spp. cover",
-  density20m2_macstump      = "Macrocystis dead holdfast cover",
-  macj                      = "Juvenile Macrocystis density",
-  ptej                      = "Juvenile Pterygophora density",
-  cov_diopatra_chaetopterus = "Diopatra spp. cover",
-  density20m2_lamset        = "Laminaria setchelli density",
-  cov_crustose_coralline    = "Crustose coralline cover",
-  tegula_densitym2          = "Tegula spp. density",
-  n_macro_plants_20m2       = "Macrocystis density",
-  density20m2_ptecal        = "Pterygophora density",
-  macro_stipe_density_20m2  = "Macrocystis stipe density",
-  cov_demarestia_spp        = "Desmarestia spp. cover",
-  density20m2_nerlue        = "Nereocystis luetkeana density",
-  cov_lam_holdfast_live     = "Laminariales holdfast cover",
-  cov_articulated_coralline = "Articulated coralline cover",
-  pomaulax_densitym2        = "Pomaulax spp. density",
-  cov_encrusting_red        = "Encrusting red algae cover",
+  cov_fleshy_red            = "Fleshy red algae cov.",
+  cov_mac_holdfast_live     = "Macrocystis cov.",
+  cov_phragmatopoma         = "Phragmatopoma spp. cov.",
+  density20m2_macstump      = "Dead holdfast cov.",
+  macj                      = "Juv. Macrocystis den.",
+  ptej                      = "Juv. Pterygophora den.",
+  cov_diopatra_chaetopterus = "Diopatra spp. cov.",
+  density20m2_lamset        = "L. setchelli den.",
+  cov_crustose_coralline    = "Crustose coralline cov.",
+  tegula_densitym2          = "Tegula spp. den.",
+  n_macro_plants_20m2       = "Macrocystis den.",
+  density20m2_ptecal        = "Pterygophora den.",
+  macro_stipe_density_20m2  = "Macrocystis stipe den.",
+  cov_demarestia_spp        = "Desmarestia cov.",
+  density20m2_nerlue        = "Nereocystis luetkeana den.",
+  cov_lam_holdfast_live     = "Lam. holdfast cov.",
+  cov_articulated_coralline = "Articulated coralline cov.",
+  pomaulax_densitym2        = "Pomaulax spp. den.",
+  cov_encrusting_red        = "Encrusting red algae cov.",
   relief_cm                 = "Vertical relief",
-  lamr                      = "Laminariales recruit density",
-  cov_bare_sand             = "Bare sand cover",
+  lamr                      = "Lam. recruit den.",
+  cov_bare_sand             = "Bare sand cov.",
   risk_index                = "Reef rugosity",
-  cov_desmarestia_spp       = "Desmarestia spp. cover"
+  cov_desmarestia_spp       = "Desmarestia spp. cov.",
+  cov_dodecaceria_spp       = "Dedecaceria spp den."
 )
 
 # Panel A: PCA biplot (no legend so we can use space)
@@ -1131,8 +1164,17 @@ my_theme <- ggplot2::theme(
   strip.background = ggplot2::element_blank()
 )
 
+
+trim_vars <- c(
+  "n_macro_plants_20m2",   # Macrocystis density
+  "density20m2_ptecal",    # Pterygophora density
+  "lamr",                  # Laminariales recruits
+  "density20m2_nerlue",    # Nereocystis density
+  "cov_dodecaceria_spp"    # Dodecaceria cover
+)
+
+
 box_df <- dat_raw %>%
-  # drop extreme outliers (same as before)
   dplyr::filter(density20m2_lamset < 3 | is.na(density20m2_lamset)) %>%
   dplyr::left_join(truth_all, by = c("patch_id","site","zone","year")) %>%
   dplyr::select(state, dplyr::all_of(top15_tbl$variable)) %>%
@@ -1141,6 +1183,14 @@ box_df <- dat_raw %>%
     names_to  = "variable",
     values_to = "value"
   ) %>%
+  # trim extreme outliers only for selected variables
+  dplyr::group_by(variable) %>%
+  dplyr::mutate(
+    q_low  = if (first(variable) %in% trim_vars) stats::quantile(value, 0.01, na.rm = TRUE) else -Inf,
+    q_high = if (first(variable) %in% trim_vars) stats::quantile(value, 0.90, na.rm = TRUE) else  Inf
+  ) %>%
+  dplyr::ungroup() %>%
+  dplyr::filter(value >= q_low, value <= q_high | is.na(value)) %>%
   dplyr::mutate(
     variable_pretty = dplyr::recode(variable, !!!pretty_labs, .default = variable),
     variable_pretty = factor(variable_pretty, levels = panelC_levels),
@@ -1150,6 +1200,7 @@ box_df <- dat_raw %>%
       labels = c("Barren","Forest","Incipient")
     )
   )
+
 
 p_C <- ggplot(
   box_df,
@@ -1213,10 +1264,10 @@ Fig2
 
 # Fig 2: Patch state habitat correlates
 ggsave(
-  filename = here::here("figures", "Fig2_patch_habitat_correlates.png"),
+  filename = here::here("figures", "Fig2_patch_habitat_correlatesv2.png"),
   plot     = Fig2,
   width    = 8.5,
-  height   = 8,
+  height   = 8.5,
   dpi      = 600,
   bg       = "white"
 )
