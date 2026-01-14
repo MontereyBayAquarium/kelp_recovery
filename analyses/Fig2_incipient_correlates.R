@@ -543,7 +543,7 @@ Fig2 <- (top_row) / p_C +
 Fig2
 
 ggsave(
-  filename = here::here("figures", "Fig2_patch_habitat_correlates_SWEET.png"),
+  filename = here::here("figures", "Fig2_patch_habitat_correlatesv3.png"),
   plot     = Fig2,
   width    = 8.5,
   height   = 8.5,
