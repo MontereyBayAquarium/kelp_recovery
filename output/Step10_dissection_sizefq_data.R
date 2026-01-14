@@ -72,9 +72,25 @@ sizefq_with_pred <- urchin_sizefq %>%
     by = c("site", "site_type", "zone" = "zone", "year" = "year")
   )
 
+################################################################################
+#Step 3: export
+
+dir.create("output/survey_data/processed", recursive = TRUE, showWarnings = FALSE)
+
+saveRDS(
+  dissect_with_pred,
+  "output/survey_data/processed/dissect_with_pred.rds"
+)
+
+saveRDS(
+  sizefq_with_pred,
+  "output/survey_data/processed/sizefq_with_pred.rds"
+)
+
+
 
 ################################################################################
-#Step 3: explore
+#Step 4: explore
 
 #gonad index
 ggplot(
