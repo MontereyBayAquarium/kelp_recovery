@@ -35,7 +35,8 @@ bathy_2m_raw <- rast("/Users/jossmith/Downloads/bat_ccsr_n_2m_bathy.tif")
 site_patches <- st_read(here::here("output","gis_data","processed","site_patch_polygons.shp"))
 
 #load LDA-predicted patch types
-lda_patch <- load(here::here("output","lda_patch_transitionsv2.rda"))
+#lda_patch <- load(here::here("output","lda_patch_transitionsv2.rda")) #old
+lda_patch <- load(here::here("output","lda_patch_transitionsv5.rda"))
 
 # read CA state
 ca_state <- st_read("/Volumes/enhydra/data/kelp_recovery/gis_data/raw/CA_state/ca_boundary_wgs84.shp", quiet=TRUE) |> st_transform(4326)
@@ -255,8 +256,8 @@ g <- ggplot(urch_dat_orig, aes(x = test_diameter_mm, y = animal_24hr_mass_g)) +
 g
 
 
-ggsave(g, file = file.path(here::here("figures","S3_purple_urchin_td_biomass.png")), width = 6.5,
-       height = 6.5, units = "in")
+#ggsave(g, file = file.path(here::here("figures","S3_purple_urchin_td_biomass.png")), width = 6.5,
+#       height = 6.5, units = "in")
 
 ################################################################################
 #Step 3: apply function to sampled urchin sizes to determine biomass
@@ -480,7 +481,9 @@ ggplot(quad_build3) +
   )
 
 
-#save(quad_build3, file = here::here("output","survey_data","processed","zone_level_data4.rda"))
+#save(quad_build3, file = here::here("output","survey_data","processed","zone_level_data4.rda")) 
+
+save(quad_build3, file = "/Volumes/enhydra/data/students/sofia/zone_level_data.rda") 
 
 ################################################################################
 #Step 6: prepare scan data for plot
