@@ -134,6 +134,14 @@ test_df  <- model_df %>% dplyr::filter(year == 2025)
 
 predictor_cols_A <- setdiff(colnames(train_df), c("patch_id","site","zone","year","state"))
 
+# --- Drop spatial coordinates from habitat predictors (for contrast RFs + importance) ---
+spatial_regex <- "(^lat$|^lon$|^long$|latitude|longitude)"
+
+predictor_cols_A_nospatial <- predictor_cols_A[
+  !grepl(spatial_regex, predictor_cols_A, ignore.case = TRUE)
+]
+
+
 # Fit habitat RF (2024)
 set.seed(1985)
 rf_train2024 <- randomForest::randomForest(
@@ -382,13 +390,24 @@ fit_binary_rf_hab <- function(df, pos = "INCIP", neg = "BAR", predictors) {
 }
 
 hab_train_bin <- train_df %>%
-  dplyr::select(state, dplyr::all_of(predictor_cols_A)) %>%
+  dplyr::select(state, dplyr::all_of(predictor_cols_A_nospatial)) %>%
   dplyr::filter(!is.na(state))
 
+
 set.seed(1985)
-rf_incip_vs_bar <- fit_binary_rf_hab(hab_train_bin, pos = "INCIP", neg = "BAR", predictors = predictor_cols_A)
+rf_incip_vs_bar <- fit_binary_rf_hab(
+  hab_train_bin,
+  pos = "INCIP", neg = "BAR",
+  predictors = predictor_cols_A_nospatial
+)
+
 set.seed(1985)
-rf_incip_vs_for <- fit_binary_rf_hab(hab_train_bin, pos = "INCIP", neg = "FOR", predictors = predictor_cols_A)
+rf_incip_vs_for <- fit_binary_rf_hab(
+  hab_train_bin,
+  pos = "INCIP", neg = "FOR",
+  predictors = predictor_cols_A_nospatial
+)
+
 
 get_perm_imp <- function(rf_obj) {
   imp <- randomForest::importance(rf_obj, type = 1)
@@ -423,7 +442,11 @@ pretty_labs <- c(
   cov_bare_sand             = "Bare sand cov.",
   risk_index                = "Reef rugosity",
   cov_desmarestia_spp       = "Desmarestia spp. cov.",
-  cov_dodecaceria_spp       = "Dodecaceria spp den."
+  cov_dodecaceria_spp       = "Dodecaceria spp den.",
+  cov_barnacle              = "Barnacle cov.",
+  cov_dictyoneurum_spp      = "Dictyoneurum spp cov.",
+  density20m2_eisarb        = "Eisenia arborea den.",
+  cov_hydroids              = "Hydroids cov."
 )
 
 topN_B <- 12
@@ -534,8 +557,12 @@ p_C <- ggplot2::ggplot(box_df, ggplot2::aes(x = state_label, y = value, fill = s
 
 p_A <- p_biplot_ALL_withvecs + ggplot2::theme(legend.position = "none")
 
+#top_row <- p_A + p_B + patchwork::plot_spacer() +
+ # patchwork::plot_layout(widths = c(1.15, 0.85, 0.05))
+
 top_row <- p_A + p_B + patchwork::plot_spacer() +
-  patchwork::plot_layout(widths = c(1.15, 0.85, 0.05))
+  patchwork::plot_layout(widths = c(1.05, 1.05, 0.02))
+
 
 Fig2 <- (top_row) / p_C +
   patchwork::plot_layout(heights = c(1, 1.25)) +
@@ -547,11 +574,156 @@ Fig2 <- (top_row) / p_C +
 
 Fig2
 
+#ggsave(
+#  filename = here::here("figures", "Fig2_patch_habitat_correlatesv3.png"),
+#  plot     = Fig2,
+#  width    = 8.5,
+#  height   = 8.5,
+#  dpi      = 600,
+#  bg       = "white"
+#)
+
+
+
+################################################################################
+#Alternate plot with just Panels A and B
+
+
+################################################################################
+# Assemble Fig 2: A above B (drop C)
+################################################################################
+
+# If you want wrapped facet labels in B (prevents cutoff)
+imp_tbl <- imp_tbl %>%
+  dplyr::mutate(
+    contrast = dplyr::recode(
+      contrast,
+      "Incipient vs Barren" = "Incipient vs\nBarren",
+      "Incipient vs Forest" = "Incipient vs\nForest"
+    )
+  )
+
+# Rebuild p_B AFTER changing imp_tbl if your p_B uses it
+p_B <- imp_tbl %>%
+  dplyr::mutate(variable_pretty = tidytext::reorder_within(variable_pretty, importance, contrast)) %>%
+  ggplot2::ggplot(ggplot2::aes(x = variable_pretty, y = importance)) +
+  ggplot2::geom_col(fill = "grey40") +
+  ggplot2::coord_flip() +
+  ggplot2::facet_wrap(~ contrast, scales = "free_y") +
+  tidytext::scale_x_reordered() +
+  ggplot2::theme_bw() +
+  ggplot2::labs(x = NULL, y = "Permutation importance (Mean decrease accuracy)") +
+  ggplot2::theme(
+    panel.grid = ggplot2::element_blank(),
+    strip.background = ggplot2::element_blank(),
+    strip.text = ggplot2::element_text(face = "bold", size = 10, margin = ggplot2::margin(t = 3, b = 3)),
+    plot.margin = ggplot2::margin(t = 6, r = 6, b = 6, l = 6)
+  )
+
+p_A <- p_biplot_ALL_withvecs + ggplot2::theme(legend.position = "right")  # or "none"
+
+Fig2 <- (p_A / p_B) +
+  patchwork::plot_layout(heights = c(1.2, 0.8)) +   # tweak as desired
+  patchwork::plot_annotation(tag_levels = "A") &
+  ggplot2::theme(
+    plot.tag = ggplot2::element_text(size = 10),
+    plot.margin = ggplot2::margin(t = 5, r = 10, b = 5, l = 10)
+  )
+
+Fig2
+
 ggsave(
-  filename = here::here("figures", "Fig2_patch_habitat_correlatesv3.png"),
+  filename = here::here("figures", "Fig2_patch_habitat_correlates_AB.png"),
   plot     = Fig2,
   width    = 8.5,
   height   = 8.5,
   dpi      = 600,
   bg       = "white"
 )
+
+###############################################################################
+#Move old panel C to supp
+
+
+# Variables to show = union of top variables from both contrasts
+vars_C <- imp_tbl %>% dplyr::pull(variable) %>% unique()
+
+# Color mapping (labels used in the plot)
+patch_colors_named <- c(
+  "Barren"    = patch_colors[["BAR"]],
+  "Forest"    = patch_colors[["FOR"]],
+  "Incipient" = patch_colors[["INCIP"]]
+)
+
+
+trim_vars <- c("n_macro_plants_20m2","density20m2_ptecal","lamr","density20m2_nerlue","cov_dodecaceria_spp")
+
+# Facet order = by max importance across contrasts 
+facet_order <- imp_tbl %>%
+ group_by(variable) %>%
+  summarise(max_imp = max(importance, na.rm = TRUE), .groups = "drop") %>%
+  arrange(dplyr::desc(max_imp)) %>%
+ mutate(variable_pretty = dplyr::recode(variable, !!!pretty_labs, .default = variable)) %>%
+  pull(variable_pretty)
+
+# Build long data for boxplots (RAW values), 
+box_df <- dat_raw %>%
+  filter(density20m2_lamset < 3 | is.na(density20m2_lamset)) %>%
+  left_join(truth_all, by = c("patch_id","site","zone","year")) %>%
+  select(state, dplyr::all_of(vars_C)) %>%
+pivot_longer(cols = -state, names_to = "variable", values_to = "value") %>%
+  group_by(variable) %>%
+  mutate(
+    q_low  = if (first(variable) %in% trim_vars) stats::quantile(value, 0.01, na.rm = TRUE) else -Inf,
+    q_high = if (first(variable) %in% trim_vars) stats::quantile(value, 0.90, na.rm = TRUE) else  Inf
+  ) %>%
+  ungroup() %>%
+  filter(value >= q_low, value <= q_high | is.na(value)) %>%
+  mutate(
+    variable_pretty = dplyr::recode(variable, !!!pretty_labs, .default = variable),
+    state_label = factor(state, levels = c("BAR","FOR","INCIP"),
+                         labels = c("Barren","Forest","Incipient"))
+  ) %>%
+  mutate(variable_pretty = factor(variable_pretty, levels = facet_order))
+
+# Plot Panel C only
+p_C <- ggplot(
+  box_df,
+  aes(x = state_label, y = value, fill = state_label, color = state_label)
+) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.75, linewidth = 0.4) +
+  facet_wrap(~ variable_pretty, scales = "free_y", ncol = 5) +
+  scale_fill_manual(values = patch_colors_named, name = "Patch state") +
+  scale_color_manual(values = patch_colors_named, guide = "none") +
+  theme_bw() + my_theme +
+  theme(
+    legend.position  = "bottom",
+    strip.text       = ggplot2::element_text(size = 8, face = "bold"),
+    axis.title.x     = ggplot2::element_blank(),
+    axis.text.x      = ggplot2::element_text(size = 7, angle = 20, hjust = 1),
+    axis.text.y      = ggplot2::element_text(size = 7),
+    panel.spacing    = grid::unit(0.4, "lines"),
+    panel.border     = ggplot2::element_rect(color = "black", linewidth = 0.5)
+  ) +
+  labs(y = "Observed value", x = NULL)
+
+p_C
+
+# Save
+ggsave(
+  filename = here::here("figures", "FigS_panelC_boxplots.png"),
+  plot     = p_C,
+  width    = 8.5,
+  height   = 8.5,
+  dpi      = 600,
+  bg       = "white"
+)
+
+
+
+
+
+
+
+
+
