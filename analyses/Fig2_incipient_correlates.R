@@ -15,7 +15,7 @@ options(stringsAsFactors = FALSE)
 require(librarian)
 shelf(
   tidyverse, janitor, lubridate, sf, here,
-  randomForest, patchwork, ggrepel
+  randomForest, patchwork, ggrepel, tidytext
 )
 
 # Reproducibility
@@ -212,10 +212,10 @@ transitions_tbl_constrained <- final_patch_sf %>%
 str(transitions_tbl_constrained)
 
 # SAVE with the exact same object name as downstream expects
-save(
-  transitions_tbl_constrained,
-  file = here::here("output", "lda_patch_transitionsv6.rda")
-)
+#save(
+#  transitions_tbl_constrained,
+#  file = here::here("output", "lda_patch_transitionsv6.rda")
+#)
 
 ################################################################################
 # Export: state lookup for Fig 3 (year-indexed, lightweight) -------------------
@@ -231,10 +231,10 @@ state_lookup_2025 <- pred_2025 %>%
 
 state_lookup_all <- dplyr::bind_rows(state_lookup_2024, state_lookup_2025)
 
-readr::write_csv(
-  state_lookup_all,
-  here::here("output", "patch_state_lookup_2024_2025.csv")
-)
+#readr::write_csv(
+#  state_lookup_all,
+#  here::here("output", "patch_state_lookup_2024_2025.csv")
+#)
 
 ################################################################################
 # PART C (Fig 2A): PCA biplot of habitat structure -----------------------------
@@ -441,18 +441,23 @@ imp_tbl <- tibble::tibble(
   dplyr::ungroup()
 
 p_B <- imp_tbl %>%
-  dplyr::group_by(contrast) %>%
-  dplyr::mutate(variable_pretty = forcats::fct_reorder(variable_pretty, importance)) %>%
-  dplyr::ungroup() %>%
+  dplyr::mutate(
+    # reorder *within each facet*
+    variable_pretty = tidytext::reorder_within(variable_pretty, importance, contrast)
+  ) %>%
   ggplot2::ggplot(ggplot2::aes(x = variable_pretty, y = importance)) +
   ggplot2::geom_col(fill = "grey40") +
   ggplot2::coord_flip() +
   ggplot2::facet_wrap(~ contrast, scales = "free_y") +
+  tidytext::scale_x_reordered() +
   ggplot2::theme_bw() +
   ggplot2::labs(x = NULL, y = "Permutation importance (Mean decrease accuracy)") +
-  ggplot2::theme(panel.grid = ggplot2::element_blank(),
-                 strip.background = ggplot2::element_blank(),
-                 strip.text = ggplot2::element_text(face = "bold", size = 10))
+  ggplot2::theme(
+    panel.grid = ggplot2::element_blank(),
+    strip.background = ggplot2::element_blank(),
+    strip.text = ggplot2::element_text(face = "bold", size = 10)
+  )
+
 
 vars_C <- imp_tbl %>% dplyr::pull(variable) %>% unique()
 
