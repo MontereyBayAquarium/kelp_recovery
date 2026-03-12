@@ -76,7 +76,6 @@ p <- ggplot(
 
 p
 
-
 ################################################################################
 #Save
 
@@ -87,4 +86,98 @@ ggsave(
   height = 5,
   dpi = 300
 )
+
+
+
+
+
+
+
+
+
+
+################################################################################
+# Calculate prop exposed and year-to-year change in kelp density
+################################################################################
+
+plot_dat <- quad_build3 %>%
+  filter(year %in% c(2024, 2025)) %>%
+  mutate(
+    exposed_urchin_densitym2 = purple_urchin_densitym2 - purple_urchin_conceiledm2,
+    prop_exposed = if_else(
+      purple_urchin_densitym2 > 0,
+      exposed_urchin_densitym2 / purple_urchin_densitym2,
+      NA_real_
+    )
+  ) %>%
+  st_drop_geometry()
+
+delta_dat <- plot_dat %>%
+  select(
+    patch_id, site, site_type, year,
+    prop_exposed, purple_urchin_densitym2, mean_gi,
+    macro_stipe_density_20m2, total_biomass_g
+  ) %>%
+  pivot_wider(
+    names_from = year,
+    values_from = c(
+      prop_exposed, purple_urchin_densitym2, mean_gi,
+      macro_stipe_density_20m2, total_biomass_g
+    ),
+    names_sep = "_"
+  ) %>%
+  mutate(
+    delta_macro_stipe_density_20m2 =
+      macro_stipe_density_20m2_2025 - macro_stipe_density_20m2_2024,
+    delta_total_biomass_g =
+      total_biomass_g_2025 - total_biomass_g_2024,
+    delta_prop_exposed =
+      prop_exposed_2025 - prop_exposed_2024,
+    delta_mean_gi =
+      mean_gi_2025 - mean_gi_2024,
+    delta_purple_urchin_densitym2 =
+      purple_urchin_densitym2_2025 - purple_urchin_densitym2_2024
+  )
+
+
+
+
+p_delta <- ggplot(
+  delta_dat,
+  aes(
+    x = prop_exposed_2024,
+    y = delta_macro_stipe_density_20m2,
+    size = purple_urchin_densitym2_2024,
+    color = mean_gi_2024
+  )
+) +
+  geom_hline(yintercept = 0, linetype = 2, color = "grey50") +
+  geom_point(alpha = 0.85) +
+  scale_size_continuous(
+    name = "Purple urchin density 2024",
+    range = c(2, 14)
+  ) +
+  scale_color_viridis_c(name = "Mean GI 2024") +
+  labs(
+    x = "Proportion exposed purple urchins in 2024",
+    y = expression(Delta * " Macro stipe density (2025 - 2024)")
+  ) +
+  theme_classic()
+
+p_delta
+
+
+
+ggsave(
+  "~/Downloads/urchin_bubble_plot_delta.png",
+  plot = p_delta,
+  width = 7,
+  height = 5,
+  dpi = 300
+)
+
+
+
+
+
 
