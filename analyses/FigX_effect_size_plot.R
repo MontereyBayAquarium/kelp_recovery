@@ -444,10 +444,10 @@ p_effects <- ggplot(effects_df_plot, aes(x = effect, y = y, color = contrast)) +
     panel.grid.major.x = element_line(color = "grey90", linewidth = 0.4),
     panel.grid.minor = element_blank(),
     
-    # ✅ CLEAN AXES (both x and y, same thickness)
+    # LEAN AXES (both x and y, same thickness)
     axis.line = element_line(linewidth = 0.8, color = "black"),
     
-    # ✅ TICKS ON BOTH AXES
+    # TICKS ON BOTH AXES
     axis.ticks = element_line(linewidth = 0.8, color = "black"),
     
     # Optional: control tick length (looks nice)
