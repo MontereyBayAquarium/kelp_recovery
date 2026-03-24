@@ -10,7 +10,7 @@
 #   2) Incipient vs Forest
 #
 # Variables included:
-#   - Sea otter foraging effort
+#   - Otter occupancy
 #   - Purple urchin density
 #   - Urchin biomass density
 #   - Urchin gonad mass
@@ -42,9 +42,13 @@ set.seed(1985)
 
 load(here::here("output", "survey_data", "processed", "zone_level_data4.rda"))
 
+scan_orig <- readr::read_csv(
+  here::here("output", "scans", "scans_data.csv"),
+  show_col_types = FALSE
+)
+
 years_keep    <- c(2024, 2025)
 patch_area_m2 <- 80
-focal_months  <- c(6, 7, 8, 9)
 
 patch_colors <- c(
   "BAR"   = "#7570B3",
@@ -63,12 +67,6 @@ state_lookup_all <- readr::read_csv(
 ################################################################################
 # 1. Helper functions ----------------------------------------------------------
 ################################################################################
-
-first_present <- function(dat, choices) {
-  out <- intersect(choices, names(dat))
-  if (length(out) == 0) return(NA_character_)
-  out[1]
-}
 
 safe_ratio <- function(num, den) {
   out <- ifelse(is.finite(num) & is.finite(den) & den > 0, num / den, NA_real_)
@@ -90,12 +88,9 @@ hedges_g <- function(x1, x2) {
   s2 <- stats::sd(x2)
   
   s_pooled <- sqrt(((n1 - 1) * s1^2 + (n2 - 1) * s2^2) / (n1 + n2 - 2))
-  
   if (!is.finite(s_pooled) || s_pooled == 0) return(NA_real_)
   
   d <- (m1 - m2) / s_pooled
-  
-  # Small-sample correction
   J <- 1 - (3 / (4 * (n1 + n2) - 9))
   
   J * d
@@ -143,17 +138,15 @@ boot_hedges_g <- function(x1, x2, n_boot = 2000, conf = 0.95) {
 }
 
 ################################################################################
-# 2. Build patch-level predictors ----------------------------------------------
+# 2. Build patch-level benthic predictors --------------------------------------
 ################################################################################
 
 core_patch_cols <- c(
-  "mean_biomass_g",
   "mean_gonad_mass_g",
   "purple_urchin_densitym2",
   "purple_urchin_conceiledm2",
   "purple_urchin_concealedm2",
   "total_biomass_g",
-  "total_gonad_mass_g",
   "relief_cm",
   "risk_index",
   "lamr",
@@ -198,124 +191,69 @@ patch_predictors_all <- patch_predictors_all %>%
   )
 
 ################################################################################
-# 3. Build sea otter foraging predictor ----------------------------------------
+# 3. Build patch polygons ------------------------------------------------------
 ################################################################################
 
-forage_path <- "/Volumes/enhydra/data/foraging_data/processed/foraging_data_2024_2025_processed.csv"
-forage_orig <- readr::read_csv(forage_path, show_col_types = FALSE)
-
-lon_col  <- first_present(forage_orig, c("long", "lon", "longitude", "Longitude"))
-lat_col  <- first_present(forage_orig, c("lat", "latitude", "Latitude"))
-id_col   <- first_present(forage_orig, c("foragdata_id", "foragdiv_id", "fid", "id"))
-date_col <- first_present(forage_orig, c("date", "Date"))
-
-if (any(is.na(c(lon_col, lat_col, id_col)))) {
-  stop("Missing lon/lat/id columns in foraging data.")
-}
-
-forage_dat <- forage_orig %>%
-  dplyr::mutate(
-    .date_tmp = if (!is.na(date_col)) {
-      suppressWarnings(lubridate::as_date(.data[[date_col]]))
-    } else {
-      as.Date(NA)
-    },
-    date = dplyr::if_else(
-      !is.na(.date_tmp),
-      .date_tmp,
-      lubridate::make_date(year = .data$year, month = .data$month, day = .data$day)
-    )
+patch_geom <- quad_build3 %>%
+  dplyr::select(patch_id, site, zone, geometry) %>%
+  dplyr::group_by(patch_id, site, zone) %>%
+  dplyr::summarise(
+    geometry = sf::st_union(geometry),
+    .groups = "drop"
   ) %>%
-  dplyr::mutate(date = lubridate::as_date(date)) %>%
-  dplyr::select(dplyr::all_of(c(
-    id_col, lon_col, lat_col, "prey", "size", "qualifier",
-    "number", "date", "month", "year"
-  ))) %>%
-  dplyr::rename(
-    fid  = dplyr::all_of(id_col),
-    long = dplyr::all_of(lon_col),
-    lat  = dplyr::all_of(lat_col)
-  )
+  sf::st_as_sf()
 
-size_key <- tidyr::expand_grid(size = 1:4, qualifier = c("a", "b", "c")) %>%
-  dplyr::mutate(
-    size_cm = (size - 1) * 5 + dplyr::case_when(
-      qualifier == "a" ~ 1.66,
-      qualifier == "b" ~ 3.32,
-      TRUE             ~ 4.98
-    )
-  )
+################################################################################
+# 4. Scan-based otter occupancy ------------------------------------------------
+################################################################################
 
-pur_forage <- forage_dat %>%
-  dplyr::filter(month %in% focal_months, tolower(prey) == "pur") %>%
-  dplyr::left_join(size_key, by = c("size", "qualifier")) %>%
+scan_build <- scan_orig %>%
+  janitor::clean_names() %>%
   dplyr::mutate(
-    test_diameter_mm = size_cm * 10,
-    biomass_g        = -14.2 + 7.44 * exp(0.04 * test_diameter_mm),
-    biomass_g        = ifelse(biomass_g < 0.5, 0.5, biomass_g),
-    number           = tidyr::replace_na(number, 1),
-    total_biomass_g  = biomass_g * number
+    scan_date = as.Date(date),
+    year      = lubridate::year(scan_date),
+    ind       = as.numeric(ind)
   ) %>%
-  dplyr::filter(size_cm < 8) %>%
-  dplyr::filter(is.finite(long), is.finite(lat))
+  dplyr::filter(year %in% years_keep) %>%
+  dplyr::filter(!is.na(lat), !is.na(long))
 
-pur_sf <- sf::st_as_sf(
-  pur_forage,
+scan_sf <- sf::st_as_sf(
+  scan_build,
   coords = c("long", "lat"),
   crs = 4326,
   remove = FALSE
 )
 
-quad_same_crs <- quad_build3 %>%
-  sf::st_transform(sf::st_crs(pur_sf)) %>%
-  dplyr::mutate(
-    survey_year = lubridate::year(survey_date),
-    survey_doy  = lubridate::yday(survey_date)
-  ) %>%
-  dplyr::select(patch_id, site, zone, survey_date, survey_year, survey_doy)
+scan_in_patches <- sf::st_join(
+  scan_sf,
+  patch_geom %>% dplyr::select(patch_id, site, zone),
+  join = sf::st_intersects,
+  left = FALSE
+)
 
-pur_spatial <- sf::st_join(pur_sf, quad_same_crs, join = sf::st_intersects, left = TRUE)
-
-pur_patch <- pur_spatial %>%
-  dplyr::mutate(
-    forag_doy = lubridate::yday(date),
-    diff_days = abs(forag_doy - survey_doy)
-  ) %>%
-  dplyr::group_by(fid) %>%
-  dplyr::slice_min(diff_days, with_ties = FALSE) %>%
-  dplyr::ungroup() %>%
+scan_patch_date <- scan_in_patches %>%
   sf::st_drop_geometry() %>%
-  dplyr::filter(survey_year %in% years_keep)
-
-foraging_by_patch <- pur_patch %>%
-  dplyr::group_by(patch_id, site, zone, survey_year) %>%
+  dplyr::group_by(scan_date, year, patch_id, site, zone) %>%
   dplyr::summarise(
-    total_urchin_biomass_consumed_g = sum(total_biomass_g, na.rm = TRUE),
-    n_foraging_obs                  = dplyr::n(),
+    patch_tot_otters = sum(ind, na.rm = TRUE),
     .groups = "drop"
-  ) %>%
-  dplyr::mutate(
-    foraging_biomass_kg = total_urchin_biomass_consumed_g / 1000,
-    year                = survey_year
-  ) %>%
-  dplyr::group_by(year) %>%
-  dplyr::mutate(
-    rel_foraging_effort = foraging_biomass_kg / sum(foraging_biomass_kg, na.rm = TRUE)
-  ) %>%
-  dplyr::ungroup() %>%
-  dplyr::mutate(
-    rel_foraging_effort = tidyr::replace_na(rel_foraging_effort, 0)
+  )
+
+scan_patch_metrics <- scan_patch_date %>%
+  dplyr::group_by(year, patch_id, site, zone) %>%
+  dplyr::summarise(
+    mean_otter_occupancy = mean(patch_tot_otters, na.rm = TRUE),
+    .groups = "drop"
   )
 
 ################################################################################
-# 4. Join predictors + state response ------------------------------------------
+# 5. Join all predictors -------------------------------------------------------
 ################################################################################
 
 driver_df_all <- patch_predictors_all %>%
   dplyr::filter(year %in% years_keep) %>%
   dplyr::left_join(
-    foraging_by_patch %>%
-      dplyr::select(patch_id, site, zone, year, rel_foraging_effort),
+    scan_patch_metrics,
     by = c("patch_id", "site", "zone", "year")
   ) %>%
   dplyr::left_join(
@@ -323,15 +261,16 @@ driver_df_all <- patch_predictors_all %>%
     by = c("patch_id", "site", "zone", "year")
   ) %>%
   dplyr::mutate(
+    mean_otter_occupancy = tidyr::replace_na(mean_otter_occupancy, 0),
     state_resp = factor(state_resp, levels = c("BAR", "INCIP", "FOR"))
   )
 
 ################################################################################
-# 5. Select focal variables ----------------------------------------------------
+# 6. Variables -----------------------------------------------------------------
 ################################################################################
 
 pretty_lab_map <- c(
-  "rel_foraging_effort"      = "Sea otter foraging effort",
+  "mean_otter_occupancy"     = "Otter occupancy",
   "purple_urchin_densitym2"  = "Purple urchin density",
   "urchin_biomass_densitym2" = "Urchin biomass density",
   "mean_gonad_mass_g"        = "Urchin gonad mass",
@@ -342,7 +281,7 @@ pretty_lab_map <- c(
 )
 
 vars_focus <- c(
-  "rel_foraging_effort",
+  "mean_otter_occupancy",
   "purple_urchin_densitym2",
   "urchin_biomass_densitym2",
   "mean_gonad_mass_g",
@@ -365,7 +304,7 @@ plot_df <- driver_df_all %>%
   )
 
 ################################################################################
-# 6. Compute effect sizes ------------------------------------------------------
+# 7. Compute effect sizes ------------------------------------------------------
 ################################################################################
 
 get_contrast_effects <- function(dat, focal = "INCIP", ref = "BAR", contrast_lab) {
@@ -405,7 +344,7 @@ effects_df <- dplyr::bind_rows(eff_bar, eff_for) %>%
   )
 
 ################################################################################
-# 7. Rank variables by Incipient vs Barren effect size -------------------------
+# 8. Rank variables ------------------------------------------------------------
 ################################################################################
 
 var_order <- effects_df %>%
@@ -421,36 +360,28 @@ effects_df_plot <- effects_df %>%
   dplyr::arrange(variable_lab, contrast) %>%
   dplyr::mutate(
     y_base = as.numeric(variable_lab),
-    y = dplyr::case_when(
-      contrast == "Incipient vs Barren" ~ y_base - 0.16,
-      contrast == "Incipient vs Forest" ~ y_base + 0.16,
-      TRUE ~ y_base
+    y = dplyr::if_else(
+      contrast == "Incipient vs Barren",
+      y_base - 0.16,
+      y_base + 0.16
     )
   )
 
 ################################################################################
-# 8. Build figure --------------------------------------------------------------
+# 9. Plot ----------------------------------------------------------------------
 ################################################################################
 
-subtitle_text <- paste(
-  "Variables are ranked by the absolute effect size for Incipient vs Barren.",
-  "Points show Hedges' g and error bars show bootstrap 95% confidence intervals."
-)
-
-x_rng <- range(
-  c(effects_df_plot$conf.low, effects_df_plot$conf.high),
-  na.rm = TRUE
-)
-x_pad <- diff(x_rng) * 0.08
-if (!is.finite(x_pad) || x_pad == 0) x_pad <- 0.25
-
 p_effects <- ggplot(effects_df_plot, aes(x = effect, y = y, color = contrast)) +
+  
+  # zero reference
   geom_vline(
     xintercept = 0,
     linetype   = "dashed",
-    linewidth  = 0.5,
+    linewidth  = 0.6,
     color      = "grey40"
   ) +
+  
+  # CI
   geom_segment(
     aes(
       x    = conf.low,
@@ -458,14 +389,18 @@ p_effects <- ggplot(effects_df_plot, aes(x = effect, y = y, color = contrast)) +
       y    = y,
       yend = y
     ),
-    linewidth = 1.0,
+    linewidth = 1.2,
     alpha     = 0.95,
     lineend   = "round"
   ) +
+  
+  # points
   geom_point(
-    size  = 3.8,
-    alpha = 0.98
+    size  = 4,
+    alpha = 1
   ) +
+  
+  # colors
   scale_color_manual(
     values = c(
       "Incipient vs Barren" = patch_colors[["BAR"]],
@@ -473,60 +408,146 @@ p_effects <- ggplot(effects_df_plot, aes(x = effect, y = y, color = contrast)) +
     ),
     name = NULL
   ) +
+  
+  # y-axis
   scale_y_continuous(
     breaks = seq_along(rev(var_order)),
     labels = rev(var_order),
     expand = expansion(mult = c(0.04, 0.04))
   ) +
-  coord_cartesian(
-    xlim = c(x_rng[1] - x_pad, x_rng[2] + x_pad),
-    clip = "off"
-  ) +
+  
+  coord_cartesian(clip = "off") +
+  
   labs(
-    x        = "Standardized difference (Hedges' g)",
-    y        = NULL,
-    title    = "Mechanistic correlates of recovery",
-    subtitle = subtitle_text,
-    caption  = paste(
-      "Positive values indicate variables that are higher in incipient forests.",
-      "Confidence intervals are bootstrap 95% intervals and may be asymmetric."
-    )
+    x = "Standardized difference (Hedges' g)",
+    y = NULL,
+    title = ""
   ) +
-  theme_classic(base_size = 12) +
+  
+  theme_classic(base_size = 13) +
+  
   theme(
-    legend.position      = "top",
-    legend.justification = "left",
-    legend.text          = element_text(size = 10),
+    # legend RIGHT
+    legend.position = "right",
+    legend.justification = "center",
+    legend.text = element_text(size = 11),
     
-    axis.text.y          = element_text(size = 10, color = "black"),
-    axis.text.x          = element_text(size = 10, color = "black"),
-    axis.title.x         = element_text(size = 11),
+    # TEXT
+    axis.text.y = element_text(size = 11, color = "black"),
+    axis.text.x = element_text(size = 11, color = "black"),
+    axis.title.x = element_text(size = 12),
     
-    plot.title           = element_text(size = 14, face = "bold"),
-    plot.subtitle        = element_text(size = 10, color = "grey20"),
-    plot.caption         = element_text(size = 9, color = "grey30"),
+    plot.title = element_text(size = 16, face = "bold"),
+    plot.caption = element_text(size = 10, color = "grey30"),
     
-    panel.grid.major.x   = element_line(color = "grey90", linewidth = 0.35),
-    panel.grid.minor.x   = element_blank(),
-    panel.grid.major.y   = element_blank(),
+    # GRID
+    panel.grid.major.x = element_line(color = "grey90", linewidth = 0.4),
+    panel.grid.minor = element_blank(),
     
-    axis.line.y          = element_blank(),
-    axis.ticks.y         = element_blank(),
+    # ✅ CLEAN AXES (both x and y, same thickness)
+    axis.line = element_line(linewidth = 0.8, color = "black"),
     
-    plot.margin          = ggplot2::margin(t = 10, r = 15, b = 10, l = 10)
+    # ✅ TICKS ON BOTH AXES
+    axis.ticks = element_line(linewidth = 0.8, color = "black"),
+    
+    # Optional: control tick length (looks nice)
+    axis.ticks.length = grid::unit(3, "pt"),
+    
+    plot.margin = ggplot2::margin(t = 10, r = 20, b = 10, l = 10)
   )
 
 p_effects
 
+
 ################################################################################
-# 9. Save figure ---------------------------------------------------------------
+# 10. Save figure --------------------------------------------------------------
 ################################################################################
 
 ggsave(
   filename = here::here("figures", "Fig_recovery_signature_effectsizes_ranked.png"),
   plot     = p_effects,
-  width    = 8.6,
-  height   = 5.2,
+  width    = 8.8,
+  height   = 5.6,
   dpi      = 600,
   bg       = "white"
 )
+
+
+################################################################################
+# 11. make table --------------------------------------------------------------
+################################################################################
+
+library(gt)
+
+effect_table_pretty <- effects_df %>%
+  dplyr::mutate(
+    ci_excludes_zero = dplyr::if_else(
+      conf.low > 0 | conf.high < 0,
+      "Yes",
+      "No"
+    ),
+    
+    effect_direction = dplyr::case_when(
+      effect > 0 ~ "Higher in incipient",
+      effect < 0 ~ "Lower in incipient",
+      TRUE ~ "No difference"
+    ),
+    
+    estimate_ci = paste0(
+      round(effect, 2),
+      " [",
+      round(conf.low, 2),
+      ", ",
+      round(conf.high, 2),
+      "]"
+    )
+  ) %>%
+  dplyr::arrange(
+    factor(contrast, levels = c("Incipient vs Barren", "Incipient vs Forest")),
+    dplyr::desc(abs(effect))
+  ) %>%
+  dplyr::select(
+    contrast,
+    variable = variable_lab,
+    `Hedges' g [95% CI]` = estimate_ci,
+    `Effect direction` = effect_direction,
+    `95% CI excludes zero` = ci_excludes_zero
+  )
+
+gt_tbl <- effect_table_pretty %>%
+  gt::gt(groupname_col = "contrast") %>%
+ # gt::tab_header(
+  #  title = "Mechanistic correlates of recovery",
+   # subtitle = "Standardized effect sizes comparing incipient forests to barrens and forests"
+  #) %>%
+  gt::cols_label(
+    variable = "Variable"
+  ) %>%
+  gt::cols_align(
+    align = "left",
+    columns = c(variable, `Effect direction`)
+  ) %>%
+  gt::cols_align(
+    align = "center",
+    columns = c(`Hedges' g [95% CI]`, `95% CI excludes zero`)
+  ) %>%
+  gt::tab_style(
+    style = gt::cell_text(color = "red"),
+    locations = gt::cells_body(
+      rows = `95% CI excludes zero` == "Yes"
+    )
+  ) %>%
+  gt::tab_style(
+    style = gt::cell_text(weight = "bold"),
+    locations = gt::cells_row_groups()
+  ) %>%
+  gt::tab_style(
+    style = gt::cell_text(weight = "bold"),
+    locations = gt::cells_column_labels(everything())
+  ) %>%
+  gt::tab_options(
+    table.font.size = 12,
+    data_row.padding = gt::px(5)
+  )
+
+gt_tbl
