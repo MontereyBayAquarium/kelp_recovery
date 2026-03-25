@@ -725,5 +725,154 @@ ggsave(
 
 
 
+################################################################################
+# Summary statistics for Fig. 2 ------------------------------------------------
+################################################################################
+
+
+
+library(vegan)
+
+################################################################################
+# 1. Sample sizes by patch state ------------------------------------------------
+################################################################################
+
+patch_state_ns <- habitat_df %>%
+  dplyr::count(state_final, name = "n") %>%
+  dplyr::mutate(
+    state_final = factor(state_final,
+                         levels = c("BAR", "FOR", "INCIP"),
+                         labels = c("Barren", "Forest", "Incipient"))
+  )
+
+print(patch_state_ns)
+
+################################################################################
+# 2. PCA variance explained -----------------------------------------------------
+################################################################################
+
+pca_var <- (pca_obj$sdev)^2
+pca_var_exp <- pca_var / sum(pca_var)
+pca_var_tbl <- tibble::tibble(
+  PC = paste0("PC", seq_along(pca_var_exp)),
+  eigenvalue = pca_var,
+  prop_var = pca_var_exp,
+  cum_var = cumsum(pca_var_exp)
+)
+
+print(pca_var_tbl %>% dplyr::slice(1:10))
+
+cat("\nPCA variance explained:\n")
+cat("PC1 =", round(100 * pca_var_exp[1], 1), "%\n")
+cat("PC2 =", round(100 * pca_var_exp[2], 1), "%\n")
+cat("PC1 + PC2 =", round(100 * sum(pca_var_exp[1:2]), 1), "%\n")
+
+################################################################################
+# 3. Top PCA loadings -----------------------------------------------------------
+################################################################################
+
+loading_tbl <- tibble::as_tibble(
+  pca_obj$rotation[, 1:2, drop = FALSE],
+  rownames = "variable"
+) %>%
+  dplyr::rename(PC1 = PC1, PC2 = PC2) %>%
+  dplyr::mutate(
+    abs_PC1 = abs(PC1),
+    abs_PC2 = abs(PC2),
+    vec_len = sqrt(PC1^2 + PC2^2)
+  ) %>%
+  dplyr::arrange(dplyr::desc(vec_len))
+
+cat("\nTop loadings by overall vector length:\n")
+print(loading_tbl %>% dplyr::slice(1:15))
+
+cat("\nTop positive loadings on PC1:\n")
+print(loading_tbl %>% dplyr::arrange(dplyr::desc(PC1)) %>% dplyr::slice(1:10))
+
+cat("\nTop negative loadings on PC1:\n")
+print(loading_tbl %>% dplyr::arrange(PC1) %>% dplyr::slice(1:10))
+
+cat("\nTop positive loadings on PC2:\n")
+print(loading_tbl %>% dplyr::arrange(dplyr::desc(PC2)) %>% dplyr::slice(1:10))
+
+cat("\nTop negative loadings on PC2:\n")
+print(loading_tbl %>% dplyr::arrange(PC2) %>% dplyr::slice(1:10))
+
+################################################################################
+# 4. PERMANOVA -----------------------------------------------------------------
+################################################################################
+
+# This uses the same transformed/scaled habitat matrix that went into the PCA.
+# Euclidean distance is appropriate here because PCA is based on Euclidean space.
+
+permanova_res <- vegan::adonis2(
+  pca_mat ~ state_final,
+  data = habitat_df,
+  method = "euclidean",
+  permutations = 9999
+)
+
+cat("\nOverall PERMANOVA:\n")
+print(permanova_res)
+
+################################################################################
+# 5. Dispersion test (recommended alongside PERMANOVA) --------------------------
+################################################################################
+
+# Important: PERMANOVA can be influenced by differences in within-group dispersion.
+# This checks whether spread differs among groups.
+
+dist_mat <- dist(pca_mat, method = "euclidean")
+
+disp_mod <- vegan::betadisper(dist_mat, habitat_df$state_final)
+disp_anova <- anova(disp_mod)
+disp_perm  <- permutest(disp_mod, permutations = 9999)
+
+cat("\nHomogeneity of multivariate dispersion:\n")
+print(disp_anova)
+print(disp_perm)
+
+################################################################################
+# 6. Optional pairwise PERMANOVA ------------------------------------------------
+################################################################################
+
+# Uncomment if you want pairwise comparisons among states
+# library(pairwiseAdonis)
+#
+# pairwise_perm <- pairwiseAdonis::pairwise.adonis2(
+#   x = pca_mat,
+#   factors = habitat_df$state_final,
+#   sim.method = "euclidean",
+#   p.adjust.m = "BH"
+# )
+#
+# cat("\nPairwise PERMANOVA:\n")
+# print(pairwise_perm)
+
+################################################################################
+# 7. Nicely formatted values for manuscript text --------------------------------
+################################################################################
+
+# Pull overall PERMANOVA values
+perm_F  <- permanova_res$F[1]
+perm_R2 <- permanova_res$R2[1]
+perm_p  <- permanova_res$`Pr(>F)`[1]
+
+cat("\nManuscript-ready summary:\n")
+cat(
+  paste0(
+    "PC1 explained ", round(100 * pca_var_exp[1], 1),
+    "% and PC2 explained ", round(100 * pca_var_exp[2], 1),
+    "% of the variation (", round(100 * sum(pca_var_exp[1:2]), 1),
+    "% cumulative). PERMANOVA indicated that habitat structure differed among patch states ",
+    "(F = ", round(perm_F, 2),
+    ", R2 = ", round(perm_R2, 3),
+    ", p = ", format.pval(perm_p, digits = 3), ")."
+  ),
+  "\n"
+)
+
+
+
 
 
