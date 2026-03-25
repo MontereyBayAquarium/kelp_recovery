@@ -270,12 +270,12 @@ driver_df_all <- patch_predictors_all %>%
 ################################################################################
 
 pretty_lab_map <- c(
-  "mean_otter_occupancy"     = "Otter occupancy",
+  "mean_otter_occupancy"     = "Sea otter occupancy",
   "purple_urchin_densitym2"  = "Purple urchin density",
   "urchin_biomass_densitym2" = "Urchin biomass density",
   "mean_gonad_mass_g"        = "Urchin gonad mass",
   "behavior_ratio"           = "Urchin concealment ratio",
-  "relief_cm"                = "Reef relief (cm)",
+  "relief_cm"                = "Reef relief",
   "risk_index"               = "Reef rugosity",
   "kelp_recruit_density"     = "Kelp recruit density"
 )
@@ -464,7 +464,7 @@ p_effects
 ################################################################################
 
 ggsave(
-  filename = here::here("figures", "Fig_recovery_signature_effectsizes_ranked.png"),
+  filename = here::here("figures", "Fig4_recovery_effectsizes_ranked.png"),
   plot     = p_effects,
   width    = 8.8,
   height   = 5.6,
