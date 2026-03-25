@@ -284,10 +284,10 @@ p_delta <- ggplot(
   theme_classic(base_size = 10) +
   theme(
     strip.background = element_blank(),
-    strip.text = element_text(face = "bold", size = 9),
+    strip.text = element_text(face = "bold", size = 12),
     axis.text.x = element_text(angle = 20, hjust = 1),
-    axis.text = element_text(size = 8, color = "black"),
-    axis.title = element_text(size = 9),
+    axis.text = element_text(size = 12, color = "black"),
+    axis.title = element_text(size = 12),
     legend.position = "right"
   )
 
