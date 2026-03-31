@@ -125,8 +125,8 @@ ggplot(sampling_days_per_quarter, aes(x = factor(quarter), y = n_sampling_days, 
 
 ################################################################################
 #Export
-write.csv(scan_build3, file = file.path(outdir, "scans", "scans_data.csv"), 
-          row.names = F) #last write 31 July 2025
+write.csv(scan_build3, file = file.path(outdir, "scans", "scans_datav2.csv"), 
+          row.names = F) #last write 30 March 2026
 
 
                        
