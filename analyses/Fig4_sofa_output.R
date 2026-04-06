@@ -298,3 +298,42 @@ eta_sum %>%
   select(patch_type, med_pct, l90_pct, u90_pct) %>%
   arrange(patch_type) %>%
   print()
+
+
+################################################################################
+# Summary stats for gonad index (Fig 4B) ----------------------------------------
+################################################################################
+
+gi_summary <- quad_plot_dat %>%
+  dplyr::filter(!is.na(mean_gi)) %>%
+  dplyr::group_by(patch_type) %>%
+  dplyr::summarise(
+    n      = sum(is.finite(mean_gi)),
+    mean   = mean(mean_gi, na.rm = TRUE),
+    sd     = sd(mean_gi, na.rm = TRUE),
+    se     = sd / sqrt(n),
+    median = median(mean_gi, na.rm = TRUE),
+    q25    = quantile(mean_gi, 0.25, na.rm = TRUE),
+    q75    = quantile(mean_gi, 0.75, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  dplyr::arrange(factor(patch_type, levels = c("BAR", "INCIP", "FOR")))
+
+gi_summary
+
+biomass_summary <- quad_plot_dat %>%
+  dplyr::filter(!is.na(biomass_density_g_m2)) %>%
+  dplyr::group_by(patch_type) %>%
+  dplyr::summarise(
+    n      = sum(is.finite(biomass_density_g_m2)),
+    mean   = mean(biomass_density_g_m2, na.rm = TRUE),
+    sd     = sd(biomass_density_g_m2, na.rm = TRUE),
+    se     = sd / sqrt(n),
+    median = median(biomass_density_g_m2, na.rm = TRUE),
+    q25    = quantile(biomass_density_g_m2, 0.25, na.rm = TRUE),
+    q75    = quantile(biomass_density_g_m2, 0.75, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  dplyr::arrange(factor(patch_type, levels = c("BAR", "INCIP", "FOR")))
+
+biomass_summary

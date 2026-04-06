@@ -643,7 +643,7 @@ p_C <- ggplot(
     color = "black",
     linewidth = 0.3
   ) +
-  facet_wrap(~ patch_2024_lab, nrow = 1) +
+  facet_wrap(~ patch_2024_lab, nrow = 1, scales = "free_x") +
   scale_fill_manual(
     values = change_cols,
     name = "Patch outcome"
@@ -690,8 +690,151 @@ final_fig
 ggsave(
   filename = file.path(figdir, "Fig5_otter_occupancy_patch_dynamics.png"),
   plot = final_fig,
-  width = 10,
+  width = 8,
   height = 7,
   units = "in",
   dpi = 600
 )
+
+
+################################################################################
+# STEP 17: summary stats
+################################################################################
+
+# total patches
+(n_total <- nrow(patch_transition_lookup))
+
+# barren-start patches
+(n_barren <- sum(patch_transition_lookup$patch_2024 == "BAR", na.rm = TRUE))
+
+# improved vs not
+(table_barren <- barren_dat %>%
+  count(barren_outcome))
+
+
+(mean_improved <- mean(barren_dat$barren_improved))
+
+summary(mod_barren_curve)
+
+(coef_est <- coef(summary(mod_barren_curve))["otter_use_index", "Estimate"])
+(coef_se  <- coef(summary(mod_barren_curve))["otter_use_index", "Std. Error"])
+(coef_p   <- coef(summary(mod_barren_curve))["otter_use_index", "Pr(>|z|)"])
+
+(odds_ratio <- exp(coef_est))
+
+
+(pred_extremes <- tibble(
+  otter_use_index = c(0.1, 0.9)
+))
+
+(pred_vals <- predict(
+  mod_barren_curve,
+  newdata = pred_extremes,
+  type = "response"
+))
+
+(pred_extremes$prob <- pred_vals)
+
+
+(summary(mod_barren_surface))
+
+(df_delta %>%
+  group_by(patch_changes) %>%
+  summarise(
+    mean_delta = mean(delta_otters, na.rm = TRUE),
+    sd_delta = sd(delta_otters, na.rm = TRUE),
+    n = n()
+  ))
+
+
+
+################################################################################
+# STEP X: statistical tests for Panel C
+################################################################################
+
+# function to run pairwise comparison safely
+run_test <- function(dat, group1, group2) {
+  sub <- dat %>%
+    dplyr::filter(patch_changes %in% c(group1, group2))
+  
+  if (length(unique(sub$patch_changes)) < 2) return(NULL)
+  
+  test <- wilcox.test(
+    delta_otters ~ patch_changes,
+    data = sub
+  )
+  
+  tibble(
+    group1 = group1,
+    group2 = group2,
+    p_value = test$p.value
+  )
+}
+
+################################################################################
+# 1. INCIPIENT patches (likely strongest signal)
+################################################################################
+
+incip_dat <- df_delta %>%
+  dplyr::filter(patch_2024_lab == "Incipient")
+
+incip_summary <- incip_dat %>%
+  group_by(patch_changes) %>%
+  summarise(
+    mean = mean(delta_otters, na.rm = TRUE),
+    median = median(delta_otters, na.rm = TRUE),
+    n = n()
+  )
+
+(incip_test <- run_test(incip_dat, "Declined", "Stable"))
+
+################################################################################
+# 2. BARREN patches
+################################################################################
+
+bar_dat <- df_delta %>%
+  dplyr::filter(patch_2024_lab == "Barren")
+
+bar_summary <- bar_dat %>%
+  group_by(patch_changes) %>%
+  summarise(
+    mean = mean(delta_otters, na.rm = TRUE),
+    median = median(delta_otters, na.rm = TRUE),
+    n = n()
+  )
+
+(bar_test <- run_test(bar_dat, "Improved", "Stable"))
+
+################################################################################
+# 3. FOREST patches (optional)
+################################################################################
+
+for_dat <- df_delta %>%
+  dplyr::filter(patch_2024_lab == "Forest")
+
+for_summary <- for_dat %>%
+  group_by(patch_changes) %>%
+  summarise(
+    mean = mean(delta_otters, na.rm = TRUE),
+    median = median(delta_otters, na.rm = TRUE),
+    n = n()
+  )
+
+(for_test <- run_test(for_dat, "Declined", "Stable"))
+
+################################################################################
+# PRINT RESULTS
+################################################################################
+
+incip_summary
+incip_test
+
+bar_summary
+bar_test
+
+for_summary
+for_test
+
+
+
+

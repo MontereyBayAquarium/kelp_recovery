@@ -551,3 +551,47 @@ gt_tbl <- effect_table_pretty %>%
   )
 
 gt_tbl
+
+gt::gtsave(
+  gt_tbl,
+  filename = here::here("tables", "TabS1_effect_size_table.png"),
+  vwidth = 1000,
+  vheight = 600
+)
+
+###############################################################################
+#Summary stats
+
+
+behavior_summary <- driver_df_all %>%
+  dplyr::filter(!is.na(state_resp)) %>%
+  dplyr::group_by(state_resp) %>%
+  dplyr::summarise(
+    n      = sum(is.finite(behavior_ratio)),
+    mean   = mean(behavior_ratio, na.rm = TRUE),
+    sd     = sd(behavior_ratio, na.rm = TRUE),
+    se     = sd / sqrt(n),
+    median = median(behavior_ratio, na.rm = TRUE),
+    q25    = quantile(behavior_ratio, 0.25, na.rm = TRUE),
+    q75    = quantile(behavior_ratio, 0.75, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+behavior_summary
+
+# Incipient vs Barren
+test_incip_bar <- wilcox.test(
+  behavior_ratio ~ state_resp,
+  data = driver_df_all %>%
+    dplyr::filter(state_resp %in% c("INCIP", "BAR"))
+)
+
+# Incipient vs Forest
+test_incip_for <- wilcox.test(
+  behavior_ratio ~ state_resp,
+  data = driver_df_all %>%
+    dplyr::filter(state_resp %in% c("INCIP", "FOR"))
+)
+
+test_incip_bar
+test_incip_for
