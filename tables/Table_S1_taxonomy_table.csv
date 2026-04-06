@@ -1,0 +1,65 @@
+Category,Variable,Taxon / group,Unit
+Physical reef,Seafloor rugosity,Reef structure,index
+Physical reef,Vertical relief,Reef structure,cm
+Mobile invertebrates,Concealed density,Purple sea urchin,ind. m²
+Mobile invertebrates,Concealed density,Red sea urchin,ind. m²
+Mobile invertebrates,Density,Pomaulax spp.,ind. m²
+Mobile invertebrates,Density,Purple sea urchin,ind. m²
+Mobile invertebrates,Density,Red sea urchin,ind. m²
+Mobile invertebrates,Density,Tegula spp.,ind. m²
+Urchin condition,Mean gonad index,Purple sea urchin,ratio
+Urchin condition,Mean gonad mass,Purple sea urchin,g
+Urchin condition,Mean individual biomass,Purple sea urchin,g
+Urchin condition,Total gonad mass,Purple sea urchin,g
+Urchin condition,Total urchin biomass,Purple sea urchin,g
+Large benthic taxa,Density,Cancer spp.,ind. 20 m²
+Large benthic taxa,Density,Eisenia arborea,ind. 20 m²
+Large benthic taxa,Density,Laminaria setchellii,ind. 20 m²
+Large benthic taxa,Density,Laminarian holdfast / stump,ind. 20 m²
+Large benthic taxa,Density,Macrocystis holdfast / stump,ind. 20 m²
+Large benthic taxa,Density,Nereocystis luetkeana,ind. 20 m²
+Large benthic taxa,Density,Pterygophora californica,ind. 20 m²
+Large benthic taxa,Density,Purple urchins on kelp,ind. 20 m²
+Recruitment,Recruit / juvenile abundance,Eisenia arborea juveniles,count
+Recruitment,Recruit / juvenile abundance,Laminaria setchellii juveniles,count
+Recruitment,Recruit / juvenile abundance,Laminaria spp. recruits,count
+Recruitment,Recruit / juvenile abundance,Macrocystis pyrifera juveniles,count
+Recruitment,Recruit / juvenile abundance,Macrocystis pyrifera recruits,count
+Recruitment,Recruit / juvenile abundance,Nereocystis luetkeana juveniles,count
+Recruitment,Recruit / juvenile abundance,Pterygophora californica juveniles,count
+Benthic cover,Percent cover,Articulated coralline algae,% cover
+Benthic cover,Percent cover,Bare rock,% cover
+Benthic cover,Percent cover,Bare sand,% cover
+Benthic cover,Percent cover,Barnacles,% cover
+Benthic cover,Percent cover,Bryozoans,% cover
+Benthic cover,Percent cover,Colonial tunicates,% cover
+Benthic cover,Percent cover,Corynactis californica,% cover
+Benthic cover,Percent cover,Crustose coralline algae,% cover
+Benthic cover,Percent cover,Cup corals,% cover
+Benthic cover,Percent cover,Dead kelp holdfast,% cover
+Benthic cover,Percent cover,Desmarestia spp.,% cover
+Benthic cover,Percent cover,Dictyoneurum spp.,% cover
+Benthic cover,Percent cover,Dictyota / Dictyopteris,% cover
+Benthic cover,Percent cover,Diopatra / Chaetopterus tubes,% cover
+Benthic cover,Percent cover,Dodecaceria spp.,% cover
+Benthic cover,Percent cover,Egregia menziesii,% cover
+Benthic cover,Percent cover,Embedded cucumbers,% cover
+Benthic cover,Percent cover,Encrusting red algae,% cover
+Benthic cover,Percent cover,Fleshy red algae,% cover
+Benthic cover,Percent cover,Green algae,% cover
+Benthic cover,Percent cover,Hydroids,% cover
+Benthic cover,Percent cover,Live Macrocystis holdfast,% cover
+Benthic cover,Percent cover,Live laminaria spp. holdfast,% cover
+Benthic cover,Percent cover,Mud / fine sediment,% cover
+Benthic cover,Percent cover,Mussels,% cover
+Benthic cover,Percent cover,Other anemones,% cover
+Benthic cover,Percent cover,Other solitary tubeworms,% cover
+Benthic cover,Percent cover,Petaloconchus,% cover
+Benthic cover,Percent cover,Phragmatopoma,% cover
+Benthic cover,Percent cover,Red turf algae (< 2 cm),% cover
+Benthic cover,Percent cover,Salmacina,% cover
+Benthic cover,Percent cover,Shell debris,% cover
+Benthic cover,Percent cover,Solitary tunicates,% cover
+Benthic cover,Percent cover,Sponges,% cover
+Benthic cover,Percent cover,Stephanocystis spp.,% cover
+Benthic cover,Percent cover,Thylacodes spp.,% cover
