@@ -219,7 +219,7 @@ plot_box <- function(df, xvar, xlab, tag_title, xlimits = NULL) {
 pA <- plot_posterior(
   draw_df     = eta_draws,
   sum_df      = eta_sum,
-  xlab        = "Foraging effort (proportion of sea\nurchins in patch vs. all other prey)",
+  xlab        = "Sea otter foraging effort (proportion of \ntime on sea urchins in patch vs. all other prey)",
   tag_title   = "A",
   show_legend = FALSE
 )
@@ -229,7 +229,7 @@ pB <- quad_plot_dat %>%
   drop_na(mean_gi) %>%
   plot_box(
     xvar      = "mean_gi",
-    xlab      = "Mean gonad index \n (ratio of gonad mass to animal mass)",
+    xlab      = "Mean purple urchin gonad index \n (ratio of gonad mass to animal mass)",
     tag_title = "B"
   )
 
@@ -239,7 +239,7 @@ pC <- quad_plot_dat %>%
   filter(biomass_density_g_m2 < 1000) %>%
   plot_box(
     xvar      = "biomass_density_g_m2",
-    xlab      = expression("Biomass density (g " * m^{-2} * ")"),
+    xlab      = expression("Purple urchin biomass density (g " * m^{-2} * ")"),
     tag_title = "C"
   )
 
@@ -251,10 +251,10 @@ pD <- ggplot(
   geom_step(linewidth = 1.1) +
   scale_color_manual(values = patch_colors, name = "Patch type") +
   scale_x_continuous(limits = c(1, 8), breaks = 1:8) +
-  labs(x = "Size frequency (cm)", y = NULL, tag = "D") +
+  labs(x = "Purple urchin \nsize frequency (cm)", y = NULL, tag = "D") +
   theme_panel(base_size = 11) +
   theme(
-    axis.text.y = element_blank(),
+    #axis.text.y = element_blank(),
     legend.position = "right"
   )
 
@@ -276,7 +276,7 @@ energetics_combined
 ################################################################################
 
 ggsave(
-  here::here("figures", "Fig4_effort_allocation_v6.png"),
+  here::here("figures", "Fig4_effort_allocation_v7.png"),
   energetics_combined,
   width  = 8,
   height = 8,
