@@ -179,7 +179,7 @@ scan_sf <- st_as_sf(
 my_theme <- theme(axis.text=element_text(size=6),
                   axis.text.y = element_text(angle = 90, hjust = 0.5),
                   axis.title=element_text(size=8),
-                  plot.tag=element_text(size=8, face="bold"),
+                  plot.tag=element_text(size=8),
                   plot.title=element_text(size=7, face="bold"),
                   panel.grid.major = element_blank(), 
                   panel.grid.minor = element_blank(),
@@ -269,7 +269,8 @@ g1 <-ggplot(quad_build3 %>% filter(year(survey_date) == 2024)) +
   labs(
     title = "2024",
     fill = "Patch type",
-    shape = ""  # legend title for shapes
+    shape = "",  # legend title for shapes,
+    tag = "A"
   ) +
   scale_fill_manual(
     name   = "Patch type",
@@ -357,7 +358,8 @@ g2 <-ggplot(quad_build3 %>% filter(year(survey_date) == 2025)) +
   labs(
     title = "2025",
     fill = "Patch type",
-    shape = ""  # legend title for shapes
+    shape = "",  # legend title for shapes
+    tag = "B"
   ) +
   scale_fill_manual(
     name   = "Patch type",
