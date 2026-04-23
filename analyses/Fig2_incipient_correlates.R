@@ -1,5 +1,5 @@
 ################################################################################
-# FIGURE 2 (sweet): PCA habitat space + contrast-specific RF importance + boxplots
+# FIGURE 2: PCA habitat space + contrast-specific RF importance + boxplots
 # PLUS: Patch transitions objects used downstream:
 #   - final_patch_sf
 #   - transitions_tbl_constrained   (EXACT NAME as your downstream code expects)
@@ -294,8 +294,8 @@ arrow_df <- loadings_df %>%
   dplyr::mutate(
     variable_pretty = dplyr::recode(
       variable,
-      "n_macro_plants_20m2"       = "Kelp density",
-      "macro_stipe_density_20m2"  = "Kelp stipe density",
+      "n_macro_plants_20m2"       = "Macrocystis density",
+      "macro_stipe_density_20m2"  = "Macrocystis stipe density",
       "cov_crustose_coralline"    = "Crustose coralline cover",
       "tegula_densitym2"          = "Tegula spp density",
       "cov_desmarestia_spp"       = "Desmarestia spp cover",
@@ -633,7 +633,7 @@ Fig2 <- (p_A / p_B) +
 Fig2
 
 ggsave(
-  filename = here::here("figures", "Fig2_patch_habitat_correlates_AB.png"),
+  filename = here::here("figures", "Fig2_patch_habitat_correlates_ABv2.png"),
   plot     = Fig2,
   width    = 8.5,
   height   = 8.5,
