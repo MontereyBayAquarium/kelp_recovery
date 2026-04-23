@@ -218,20 +218,20 @@ patch_transition_lookup <- quad_build3 %>%
     patch_2025_lab = clean_patch(patch_2025),
     
     patch_changes = dplyr::case_when(
-      patch_2024 == patch_2025 ~ "Stable",
-      patch_2024 == "BAR"   & patch_2025 %in% c("INCIP", "FOR") ~ "Improved",
-      patch_2024 == "INCIP" & patch_2025 == "FOR"               ~ "Improved",
+      patch_2024 == patch_2025 ~ "Persisted",
+      patch_2024 == "BAR"   & patch_2025 %in% c("INCIP", "FOR") ~ "Recovering",
+      patch_2024 == "INCIP" & patch_2025 == "FOR"               ~ "Recovering",
       patch_2024 == "FOR"   & patch_2025 %in% c("INCIP", "BAR") ~ "Declined",
       patch_2024 == "INCIP" & patch_2025 == "BAR"               ~ "Declined",
       TRUE ~ NA_character_
     ),
     
     barren_outcome = dplyr::case_when(
-      patch_2024 == "BAR" & patch_2025 == "BAR"               ~ "Stayed barren",
-      patch_2024 == "BAR" & patch_2025 %in% c("INCIP", "FOR") ~ "Improved",
+      patch_2024 == "BAR" & patch_2025 == "BAR"               ~ "Persisted barren",
+      patch_2024 == "BAR" & patch_2025 %in% c("INCIP", "FOR") ~ "Recovering",
       TRUE ~ NA_character_
     ),
-    barren_improved = dplyr::case_when(
+    barren_Recovering = dplyr::case_when(
       patch_2024 == "BAR" & patch_2025 == "BAR"               ~ 0,
       patch_2024 == "BAR" & patch_2025 %in% c("INCIP", "FOR") ~ 1,
       TRUE ~ NA_real_
@@ -240,11 +240,11 @@ patch_transition_lookup <- quad_build3 %>%
   dplyr::mutate(
     patch_changes = factor(
       patch_changes,
-      levels = c("Declined", "Stable", "Improved")
+      levels = c("Declined", "Persisted", "Recovering")
     ),
     barren_outcome = factor(
       barren_outcome,
-      levels = c("Stayed barren", "Improved")
+      levels = c("Persisted barren", "Recovering")
     )
   ) %>%
   dplyr::filter(!is.na(patch_changes))
@@ -309,19 +309,29 @@ scan_patch_date <- tidyr::crossing(all_scan_dates, all_patch_ids) %>%
   )
 
 ################################################################################
-# STEP 7: 2024 patch-level otter-use metrics
+# STEP 7: patch-level otter-use metrics by year and for 2024
 ################################################################################
 
-patch_otter_2024 <- scan_patch_date %>%
-  dplyr::filter(year == 2024) %>%
-  dplyr::group_by(patch_id) %>%
+patch_otter_by_year <- scan_patch_date %>%
+  dplyr::group_by(year, patch_id) %>%
   dplyr::summarise(
-    occ_freq_2024 = mean(occupied, na.rm = TRUE),
-    total_otters_2024 = sum(patch_tot_otters, na.rm = TRUE),
-    log_total_otters_2024 = log1p(total_otters_2024),
-    mean_otters_2024 = mean(patch_tot_otters, na.rm = TRUE),
-    n_scans_2024 = dplyr::n(),
+    occ_freq = mean(occupied, na.rm = TRUE),
+    total_otters = sum(patch_tot_otters, na.rm = TRUE),
+    log_total_otters = log1p(total_otters),
+    mean_otters = mean(patch_tot_otters, na.rm = TRUE),
+    n_scans = dplyr::n(),
     .groups = "drop"
+  )
+
+patch_otter_2024 <- patch_otter_by_year %>%
+  dplyr::filter(year == 2024) %>%
+  dplyr::transmute(
+    patch_id,
+    occ_freq_2024 = occ_freq,
+    total_otters_2024 = total_otters,
+    log_total_otters_2024 = log_total_otters,
+    mean_otters_2024 = mean_otters,
+    n_scans_2024 = n_scans
   )
 
 ################################################################################
@@ -365,13 +375,13 @@ barren_dat <- patch_transition_lookup %>%
   dplyr::left_join(patch_otter_2024, by = "patch_id") %>%
   dplyr::filter(
     patch_2024 == "BAR",
-    !is.na(barren_improved),
+    !is.na(barren_Recovering),
     !is.na(barren_outcome),
     !is.na(occ_freq_2024),
     !is.na(log_total_otters_2024)
   )
 
-if (nrow(barren_dat) == 0 || length(unique(barren_dat$barren_improved)) < 2) {
+if (nrow(barren_dat) == 0 || length(unique(barren_dat$barren_Recovering)) < 2) {
   stop("Barren-start improvement model could not be estimated.")
 }
 
@@ -386,7 +396,7 @@ barren_fit_surface <- barren_dat %>%
   )
 
 mod_barren_surface <- stats::glm(
-  barren_improved ~ occ_freq_2024_sc + log_total_otters_2024_sc,
+  barren_Recovering ~ occ_freq_2024_sc + log_total_otters_2024_sc,
   family = binomial(),
   data = barren_fit_surface
 )
@@ -413,38 +423,38 @@ barren_fit_curve <- barren_fit_curve %>%
   )
 
 mod_barren_curve <- stats::glm(
-  barren_improved ~ otter_use_index,
+  barren_Recovering ~ otter_use_index,
   family = binomial(),
   data = barren_fit_curve
 )
 
 ################################################################################
-# STEP 11: predictions for panel A
+# STEP 11: plotting data for panel A
 ################################################################################
 
-pred_A <- make_2d_grid(
-  x = barren_fit_surface$occ_freq_2024,
-  y = barren_fit_surface$log_total_otters_2024,
-  n_x = 120,
-  n_y = 120
-) %>%
+plot_dat_A <- patch_otter_by_year %>%
+  dplyr::left_join(
+    patch_transition_lookup %>%
+      dplyr::select(
+        patch_id, patch_2024_lab, patch_2025_lab
+      ),
+    by = "patch_id"
+  ) %>%
   dplyr::mutate(
-    pred_prob = stats::predict(
-      mod_barren_surface,
-      newdata = .,
-      type = "response"
+    patch_state = dplyr::case_when(
+      year == 2024 ~ as.character(patch_2024_lab),
+      year == 2025 ~ as.character(patch_2025_lab),
+      TRUE ~ NA_character_
+    ),
+    patch_state = factor(
+      patch_state,
+      levels = c("Barren", "Incipient", "Forest")
     )
   ) %>%
   dplyr::filter(
-    is.finite(occ_freq_2024),
-    is.finite(log_total_otters_2024),
-    is.finite(pred_prob)
-  )
-
-rug_A <- barren_fit_surface %>%
-  dplyr::transmute(
-    occ_freq_2024,
-    log_total_otters_2024
+    !is.na(occ_freq),
+    !is.na(total_otters),
+    !is.na(patch_state)
   )
 
 ################################################################################
@@ -466,30 +476,30 @@ pred_B_grid <- pred_B_grid %>%
   dplyr::mutate(
     fit_link = pred_B_link$fit,
     se_link = pred_B_link$se.fit,
-    improved_fit = inv_logit(fit_link),
-    improved_se_low = inv_logit(fit_link - se_link),
-    improved_se_high = inv_logit(fit_link + se_link),
-    stayed_fit = 1 - improved_fit,
-    stayed_se_low = 1 - improved_se_high,
-    stayed_se_high = 1 - improved_se_low
+    Recovering_fit = inv_logit(fit_link),
+    Recovering_se_low = inv_logit(fit_link - se_link),
+    Recovering_se_high = inv_logit(fit_link + se_link),
+    Persisted_fit = 1 - Recovering_fit,
+    Persisted_se_low = 1 - Recovering_se_high,
+    Persisted_se_high = 1 - Recovering_se_low
   )
 
 pred_B <- dplyr::bind_rows(
   pred_B_grid %>%
     dplyr::transmute(
       otter_use_index,
-      outcome = "Stayed barren",
-      pred_prob = stayed_fit,
-      se.low = stayed_se_low,
-      se.high = stayed_se_high
+      outcome = "Persisted barren",
+      pred_prob = Persisted_fit,
+      se.low = Persisted_se_low,
+      se.high = Persisted_se_high
     ),
   pred_B_grid %>%
     dplyr::transmute(
       otter_use_index,
-      outcome = "Improved",
-      pred_prob = improved_fit,
-      se.low = improved_se_low,
-      se.high = improved_se_high
+      outcome = "Recovering",
+      pred_prob = Recovering_fit,
+      se.low = Recovering_se_low,
+      se.high = Recovering_se_high
     )
 )
 
@@ -497,6 +507,10 @@ rug_B <- barren_fit_curve %>%
   dplyr::transmute(
     otter_use_index
   )
+
+################################################################################
+# STEP 13: panel A
+################################################################################
 
 ################################################################################
 # STEP 13: panel A
@@ -515,41 +529,36 @@ base_theme <- theme_classic(base_size = 11) +
   )
 
 change_cols <- c(
-  "Declined" = "indianred",
-  "Stable"   = "grey60",
-  "Improved" = "navyblue"
+  "Declined"   = "indianred",
+  "Persisted"     = "grey60",
+  "Recovering" = "navyblue"
 )
 
 curve_cols <- c(
-  "Stayed barren" = "grey60",
-  "Improved"      = "navyblue"
+  "Persisted barren" = "grey60",
+  "Recovering"      = "navyblue"
 )
 
+patch_cols <- c(
+  "Barren"    = "#7570B3",
+  "Incipient" = "#D95F02",
+  "Forest"    = "#1B9E77"
+)
 
 p_A <- ggplot(
-  pred_A,
-  aes(x = occ_freq_2024, y = log_total_otters_2024, fill = pred_prob)
+  plot_dat_A,
+  aes(x = occ_freq, y = log_total_otters, fill = patch_state)
 ) +
-  geom_raster(interpolate = TRUE) +
-  geom_contour(
-    aes(z = pred_prob),
-    color = "white",
-    linewidth = 0.35,
-    alpha = 0.8,
-    bins = 6
-  ) +
   geom_point(
-    data = rug_A,
-    aes(x = occ_freq_2024, y = log_total_otters_2024),
-    inherit.aes = FALSE,
+    shape = 21,
     color = "black",
-    alpha = 0.45,
-    size = 1.2
+    alpha = 0.85,
+    size = 3.1,
+    stroke = 0.3
   ) +
-  scale_fill_viridis_c(
-    name = "Improvement\nprobability",
-    labels = scales::percent_format(accuracy = 1),
-    limits = c(0, 1)
+  scale_fill_manual(
+    values = patch_cols,
+    name = "Patch state"
   ) +
   scale_x_continuous(
     labels = scales::percent_format(accuracy = 1),
@@ -561,14 +570,13 @@ p_A <- ggplot(
   ) +
   coord_cartesian(xlim = c(0, 0.8)) +
   labs(
-    x = "2024 sea otter \noccupancy frequency",
-    y = "log(1 + total otters counted \nin patch during 2024)"
+    x = "Sea otter occupancy frequency",
+    y = "log(1 + total otters counted \nin patch)"
   ) +
   base_theme +
   theme(
     legend.position = "right"
   )
-
 ################################################################################
 # STEP 14: panel B
 ################################################################################
@@ -683,14 +691,14 @@ final_fig <- top_row / p_C +
       plot.tag = element_text(face = "bold", size = 14)
     )
   ) +
-  patchwork::plot_layout(heights = c(0.92, 1.0), widths = c(1.05, 0.95))
+  patchwork::plot_layout(heights = c(0.92, 1.0), widths = c(1.15, 0.85))
 
 final_fig
 
 ggsave(
-  filename = file.path(figdir, "Fig5_otter_occupancy_patch_dynamics.png"),
+  filename = file.path(figdir, "Fig5_otter_occupancy_patch_dynamicsv2.png"),
   plot = final_fig,
-  width = 8,
+  width = 8.8,
   height = 7,
   units = "in",
   dpi = 600
@@ -707,12 +715,12 @@ ggsave(
 # barren-start patches
 (n_barren <- sum(patch_transition_lookup$patch_2024 == "BAR", na.rm = TRUE))
 
-# improved vs not
+# Recovering vs not
 (table_barren <- barren_dat %>%
-  count(barren_outcome))
+    count(barren_outcome))
 
 
-(mean_improved <- mean(barren_dat$barren_improved))
+(mean_Recovering <- mean(barren_dat$barren_Recovering))
 
 summary(mod_barren_curve)
 
@@ -739,12 +747,12 @@ summary(mod_barren_curve)
 (summary(mod_barren_surface))
 
 (df_delta %>%
-  group_by(patch_changes) %>%
-  summarise(
-    mean_delta = mean(delta_otters, na.rm = TRUE),
-    sd_delta = sd(delta_otters, na.rm = TRUE),
-    n = n()
-  ))
+    group_by(patch_changes) %>%
+    summarise(
+      mean_delta = mean(delta_otters, na.rm = TRUE),
+      sd_delta = sd(delta_otters, na.rm = TRUE),
+      n = n()
+    ))
 
 
 
@@ -786,7 +794,7 @@ incip_summary <- incip_dat %>%
     n = n()
   )
 
-(incip_test <- run_test(incip_dat, "Declined", "Stable"))
+(incip_test <- run_test(incip_dat, "Declined", "Persisted"))
 
 ################################################################################
 # 2. BARREN patches
@@ -803,7 +811,7 @@ bar_summary <- bar_dat %>%
     n = n()
   )
 
-(bar_test <- run_test(bar_dat, "Improved", "Stable"))
+(bar_test <- run_test(bar_dat, "Recovering", "Persisted"))
 
 ################################################################################
 # 3. FOREST patches (optional)
@@ -820,7 +828,7 @@ for_summary <- for_dat %>%
     n = n()
   )
 
-(for_test <- run_test(for_dat, "Declined", "Stable"))
+(for_test <- run_test(for_dat, "Declined", "Persisted"))
 
 ################################################################################
 # PRINT RESULTS
@@ -834,7 +842,3 @@ bar_test
 
 for_summary
 for_test
-
-
-
-
